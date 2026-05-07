@@ -33,27 +33,28 @@ namespace Combat
 
         public void UseSkill(int slot)
         {
-            if (_combatOver)       return;
-            if (!_awaitingInput)   return;
+            if (_combatOver) return;
+            if (!_awaitingInput) return;
             if (_skills == null || slot < 0 || slot >= _skills.Length) return;
 
             var skill = _skills[slot];
 
             if (_cooldowns[slot] > 0)
-            {
-                string s = _cooldowns[slot] == 1 ? "turn" : "turns";
-                Debug.Log($"{skill.skillName} is on cooldown: {_cooldowns[slot]} {s} remaining");
-                return;   // keep awaiting input — do NOT end turn
-            }
+                return;   // keep awaiting input — player can still choose another skill
+
+            // Lock input immediately so any re-clicks during EndTurnDelayed are rejected.
+            // This must happen before executing the skill so re-entrant calls fail the
+            // !_awaitingInput guard even if they arrive in the same frame.
+            _awaitingInput = false;
 
             var dmgTarget = _currentTarget ?? Enemy;
+            EventBus.Raise(new SkillUsedEvent { Skill = skill, Caster = Player, Target = dmgTarget });
 
             switch (skill.skillType)
             {
                 case SkillType.Damage:
                     int dmg    = Random.Range(skill.minValue, skill.maxValue + 1);
                     int actual = dmgTarget.TakeDamage(dmg);
-                    Debug.Log($"{Player.Name} used {skill.skillName} → {dmgTarget.Name} took {actual} damage ({dmgTarget.HP}/{dmgTarget.MaxHP})");
                     EventBus.Raise(new UnitDamagedEvent { Target = dmgTarget, Damage = actual });
                     ApplyEffects(skill.onHitEffects, dmgTarget);
                     break;
@@ -61,12 +62,10 @@ namespace Combat
                 case SkillType.Heal:
                     int heal   = Random.Range(skill.minValue, skill.maxValue + 1);
                     int healed = Player.Heal(heal);
-                    Debug.Log($"{Player.Name} used {skill.skillName} → healed {healed} HP ({Player.HP}/{Player.MaxHP})");
                     EventBus.Raise(new UnitHealedEvent { Target = Player, Amount = healed });
                     break;
 
                 case SkillType.Buff:
-                    Debug.Log($"{Player.Name} used {skill.skillName} → [BUFF — not yet implemented]");
                     break;
             }
 
@@ -116,7 +115,6 @@ namespace Combat
                 yield return new WaitForSeconds(0.8f);
                 int dmg    = Random.Range(8, 18);
                 int actual = Player.TakeDamage(dmg);
-                Debug.Log($"{actor.Name} attacks → {Player.Name} took {actual} damage ({Player.HP}/{Player.MaxHP})");
                 EventBus.Raise(new UnitDamagedEvent { Target = Player, Damage = actual });
                 yield return new WaitForSeconds(0.5f);
                 EndTurn();
@@ -181,6 +179,7 @@ namespace Combat
         }
     }
 
+    public struct SkillUsedEvent              { public SkillData Skill; public Unit Caster; public Unit Target; }
     public struct CombatInitEvent            { public Unit Player; public Unit Enemy; public SkillData[] PlayerSkills; }
     public struct TurnStartedEvent           { public Unit Actor; }
     public struct UnitDamagedEvent           { public Unit Target; public int Damage; }

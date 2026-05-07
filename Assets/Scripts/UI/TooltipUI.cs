@@ -22,9 +22,10 @@ namespace UI
                 return;
             }
 
-            // Activate first so Awake fires and _rt is cached before PositionAbove runs.
             gameObject.SetActive(true);
             _content.text = BuildText(skill, currentCooldown);
+            // Force layout rebuild so _rt.rect.height is current before positioning.
+            Canvas.ForceUpdateCanvases();
             PositionAbove(buttonRT);
         }
 
@@ -62,26 +63,43 @@ namespace UI
         private void PositionAbove(RectTransform buttonRT)
         {
             if (_rt == null) _rt = GetComponent<RectTransform>();
-            if (_rt == null) return;
+            if (_rt == null || buttonRT == null) { if (_rt != null) _rt.anchoredPosition = Vector2.zero; return; }
 
             var canvasRT = transform.parent as RectTransform;
             if (canvasRT == null) return;
 
-            if (buttonRT == null)
+            // For SS Overlay: world corners == screen pixel coordinates.
+            // Corners: 0=BL, 1=TL, 2=TR, 3=BR
+            Vector3[] btnCorners = new Vector3[4];
+            buttonRT.GetWorldCorners(btnCorners);
+
+            Vector2 btnTopMid    = new Vector2((btnCorners[1].x + btnCorners[2].x) * 0.5f, btnCorners[1].y);
+            Vector2 btnBottomMid = new Vector2((btnCorners[0].x + btnCorners[3].x) * 0.5f, btnCorners[0].y);
+
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, btnTopMid,    null, out Vector2 localTop);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, btnBottomMid, null, out Vector2 localBottom);
+
+            const float Gap      = 8f;
+            float       tipH     = _rt.rect.height;
+            float       tipW     = _rt.rect.width;
+            float       halfCanW = canvasRT.rect.width  * 0.5f;
+            float       halfCanH = canvasRT.rect.height * 0.5f;
+
+            // Keep tooltip horizontally centred on the button but clamped inside the canvas.
+            float clampedX = Mathf.Clamp(localTop.x, -halfCanW + tipW * 0.5f, halfCanW - tipW * 0.5f);
+
+            // Prefer above; fall back to below when the top of the tooltip would exceed the canvas.
+            bool fitsAbove = (localTop.y + Gap + tipH) <= halfCanH;
+            if (fitsAbove)
             {
-                _rt.anchoredPosition = Vector2.zero;
-                return;
+                _rt.pivot            = new Vector2(0.5f, 0f);   // grow upward from bottom edge
+                _rt.anchoredPosition = new Vector2(clampedX, localTop.y + Gap);
             }
-
-            Vector3[] corners = new Vector3[4];
-            buttonRT.GetWorldCorners(corners);
-            // corners[1]=top-left, corners[2]=top-right; for SS Overlay, world == screen pixels
-            Vector2 screenTopMid = ((Vector2)corners[1] + (Vector2)corners[2]) * 0.5f;
-
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                canvasRT, screenTopMid, null, out Vector2 localPos);
-
-            _rt.anchoredPosition = localPos + Vector2.up * 10f;
+            else
+            {
+                _rt.pivot            = new Vector2(0.5f, 1f);   // grow downward from top edge
+                _rt.anchoredPosition = new Vector2(clampedX, localBottom.y - Gap);
+            }
         }
     }
 }

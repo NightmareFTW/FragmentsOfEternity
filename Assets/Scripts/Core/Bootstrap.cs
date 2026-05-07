@@ -9,6 +9,7 @@ namespace Core
 
         private void Awake()
         {
+            EventBus.Clear();
             EnsureSingleton<GameManager>("GameManager");
             EnsureSingleton<SceneLoader>("SceneLoader");
         }
@@ -21,7 +22,7 @@ namespace Core
 
         private static void EnsureSingleton<T>(string goName) where T : MonoBehaviour
         {
-            if (FindObjectOfType<T>() == null)
+            if (Object.FindAnyObjectByType<T>() == null)
                 new GameObject(goName).AddComponent<T>();
         }
     }

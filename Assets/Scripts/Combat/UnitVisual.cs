@@ -30,6 +30,8 @@ namespace Combat
         private Coroutine     _attackCoroutine;
         private Coroutine     _hitCoroutine;
         private Coroutine     _shakeCoroutine;
+        private SkillData     _pendingSkillVFX;
+        private float         _lastShowHitTime = -1f;
 
         private void Awake()
         {
@@ -42,6 +44,7 @@ namespace Combat
             EventBus.Subscribe<CombatInitEvent>(OnCombatInit);
             EventBus.Subscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Subscribe<TargetChangedEvent>(OnTargetChanged);
+            EventBus.Subscribe<SkillUsedEvent>(OnSkillUsed);
             EventBus.Subscribe<UnitDamagedEvent>(OnUnitDamagedAnim);
             EventBus.Subscribe<UnitHealedEvent>(OnUnitHealedAnim);
             EventBus.Subscribe<StatusEffectAppliedEvent>(OnStatusEffectApplied);
@@ -54,6 +57,7 @@ namespace Combat
             EventBus.Unsubscribe<CombatInitEvent>(OnCombatInit);
             EventBus.Unsubscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Unsubscribe<TargetChangedEvent>(OnTargetChanged);
+            EventBus.Unsubscribe<SkillUsedEvent>(OnSkillUsed);
             EventBus.Unsubscribe<UnitDamagedEvent>(OnUnitDamagedAnim);
             EventBus.Unsubscribe<UnitHealedEvent>(OnUnitHealedAnim);
             EventBus.Unsubscribe<StatusEffectAppliedEvent>(OnStatusEffectApplied);
@@ -114,14 +118,29 @@ namespace Combat
             if (evt.Target == _trackedUnit) RefreshStatusIcons();
         }
 
+        private void OnSkillUsed(SkillUsedEvent evt)
+        {
+            if (_trackedUnit == null || evt.Skill == null) return;
+
+            if (evt.Skill.skillType == SkillType.Heal)
+            {
+                // Heal VFX plays on the caster, not the target.
+                if (_trackedUnit == evt.Caster && _canvasRoot)
+                    StartCoroutine(HealGlowVFX());
+                return;
+            }
+
+            // Damage skill: queue VFX for the target's next ShowHit call.
+            if (_trackedUnit == evt.Target)
+                _pendingSkillVFX = evt.Skill;
+        }
+
         // ── Update ────────────────────────────────────────────────────────
 
         private void Update()
         {
             if (_turnMeterFill == null || _trackedUnit == null) return;
             bool isReady = _trackedUnit.TurnMeter >= 100f;
-            if (isReady && !_wasReady)
-                Debug.Log($"[TurnMeter] {_trackedUnit.Name} meter full");
             _wasReady = isReady;
 
             float target = _combatOver
@@ -138,6 +157,17 @@ namespace Combat
 
         public void ShowHit(int damage)
         {
+            string unitName = _trackedUnit?.Name ?? "?";
+
+            // Guard against EventBus double-subscription or duplicate UnitVisuals on the
+            // same unit — two ShowHit calls within 100ms from one event produce one number.
+            if (Time.unscaledTime - _lastShowHitTime < 0.1f)
+            {
+                Debug.LogWarning($"[ShowHit] duplicate suppressed on {unitName} — check EventBus subscriptions or scene UnitVisual setup");
+                return;
+            }
+            _lastShowHitTime = Time.unscaledTime;
+
             PlayHitSFX();
             StartCoroutine(HitStop());
             if (_canvasRoot)
@@ -145,7 +175,8 @@ namespace Combat
                 if (_shakeCoroutine != null) StopCoroutine(_shakeCoroutine);
                 _shakeCoroutine = StartCoroutine(ScreenShake());
             }
-            if (_canvasRoot) StartCoroutine(ImpactEffectAnim());
+            if (_canvasRoot) StartCoroutine(SkillImpactVFX(_pendingSkillVFX));
+            _pendingSkillVFX = null;
             PlayHitReaction();
             if (_canvasRoot) StartCoroutine(ScreenFlashAnim());
             if (_canvasRoot) StartCoroutine(SpawnDamageNumber(damage));
@@ -285,7 +316,6 @@ namespace Combat
 
         private IEnumerator HitStop()
         {
-            Debug.Log("[FX] HitStop triggered");
             Time.timeScale = 0.05f;
             yield return new WaitForSecondsRealtime(0.04f);
             Time.timeScale = 1f;
@@ -322,7 +352,6 @@ namespace Combat
 
         private IEnumerator ScreenShake()
         {
-            Debug.Log("[FX] ScreenShake triggered");
             if (_canvasRT == null) yield break;
             const float Dur       = 0.15f;
             const float Intensity = 5f;
@@ -343,9 +372,167 @@ namespace Combat
 
         // ── SFX hooks (stubs — wire real AudioSource here later) ──────────
 
-        private void PlayAttackSFX() => Debug.Log("[SFX] Attack");
-        private void PlayHitSFX()    => Debug.Log("[SFX] Hit");
-        private void PlayHealSFX()   => Debug.Log("[SFX] Heal");
+        private void PlayAttackSFX() { }
+        private void PlayHitSFX()    { }
+        private void PlayHealSFX()   { }
+
+        // ── Skill VFX dispatcher ─────────────────────────────────────────
+        // Null skill = enemy attack with no skill → fall back to generic impact.
+
+        private IEnumerator SkillImpactVFX(SkillData skill)
+        {
+            if (skill == null)
+            {
+                yield return StartCoroutine(ImpactEffectAnim());
+                yield break;
+            }
+            if (skill.skillName == "Slash")
+            {
+                yield return StartCoroutine(SlashVFX());
+                yield break;
+            }
+            if (skill.skillName == "Heavy Blow")
+            {
+                yield return StartCoroutine(HeavyBlowVFX());
+                yield break;
+            }
+            yield return StartCoroutine(ImpactEffectAnim());
+        }
+
+        // Slash — three layered diagonal streaks across the target.
+        private IEnumerator SlashVFX()
+        {
+            if (_canvasRoot == null) yield break;
+
+            var sizes   = new Vector2[] { new Vector2(220f, 14f), new Vector2(170f, 8f), new Vector2(120f, 5f) };
+            var offsets = new Vector2[] { Vector2.zero, new Vector2(0f, 18f), new Vector2(0f, -16f) };
+            var alphas  = new float[]   { 1f, 0.75f, 0.5f };
+            var gos     = new GameObject[3];
+            var imgs    = new Image[3];
+
+            for (int i = 0; i < 3; i++)
+            {
+                gos[i] = new GameObject($"SlashVFX_{i}");
+                gos[i].transform.SetParent(_canvasRoot, false);
+                gos[i].transform.SetAsLastSibling();
+                gos[i].transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+
+                var rt = gos[i].AddComponent<RectTransform>();
+                rt.anchorMin        = rt.anchorMax = _damageSpawnAnchor;
+                rt.anchoredPosition = offsets[i];
+                rt.sizeDelta        = sizes[i];
+
+                imgs[i] = gos[i].AddComponent<Image>();
+                imgs[i].color = new Color(1f, 1f, 1f, 0f);
+            }
+
+            const float Dur = 0.22f;
+            float elapsed = 0f;
+            while (elapsed < Dur)
+            {
+                elapsed += Time.deltaTime;
+                float t      = Mathf.Clamp01(elapsed / Dur);
+                float scaleX = t < 0.4f ? t / 0.4f : 1f;
+                float fade   = t < 0.5f ? 1f : Mathf.Pow(1f - (t - 0.5f) / 0.5f, 2f);
+                for (int i = 0; i < 3; i++)
+                {
+                    gos[i].transform.localScale = new Vector3(scaleX, 1f, 1f);
+                    imgs[i].color = new Color(1f, 1f, 1f, alphas[i] * fade);
+                }
+                yield return null;
+            }
+
+            for (int i = 0; i < 3; i++) Destroy(gos[i]);
+        }
+
+        // Heavy Blow — large orange diamond burst plus a secondary darker pulse.
+        private IEnumerator HeavyBlowVFX()
+        {
+            if (_canvasRoot == null) yield break;
+
+            var go = new GameObject("HeavyBlowVFX");
+            go.transform.SetParent(_canvasRoot, false);
+            go.transform.SetAsLastSibling();
+            go.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin        = rt.anchorMax = _damageSpawnAnchor;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta        = new Vector2(80f, 80f);
+
+            var img = go.AddComponent<Image>();
+            img.color = new Color(1f, 0.45f, 0.1f, 0f);
+
+            var go2 = new GameObject("HeavyBlowVFX_Pulse");
+            go2.transform.SetParent(_canvasRoot, false);
+            go2.transform.SetAsLastSibling();
+            go2.transform.localRotation = Quaternion.Euler(0f, 0f, 22f);
+
+            var rt2 = go2.AddComponent<RectTransform>();
+            rt2.anchorMin        = rt2.anchorMax = _damageSpawnAnchor;
+            rt2.anchoredPosition = Vector2.zero;
+            rt2.sizeDelta        = new Vector2(60f, 60f);
+
+            var img2 = go2.AddComponent<Image>();
+            img2.color = new Color(0.7f, 0.2f, 0.0f, 0f);
+
+            const float Dur = 0.38f;
+            float elapsed = 0f;
+            while (elapsed < Dur)
+            {
+                elapsed += Time.deltaTime;
+                float t      = elapsed / Dur;
+                float scale  = Mathf.Sin(t * Mathf.PI) * 4.5f;
+                float scale2 = Mathf.Sin(Mathf.Clamp01(t * 1.2f - 0.1f) * Mathf.PI) * 3.2f;
+                go.transform.localScale  = new Vector3(scale,  scale,  1f);
+                go2.transform.localScale = new Vector3(scale2, scale2, 1f);
+                img.color  = new Color(1f,  0.45f, 0.1f, 0.92f * Mathf.Pow(1f - t, 1.5f));
+                img2.color = new Color(0.7f, 0.2f, 0.0f, 0.80f * Mathf.Pow(Mathf.Max(0f, 1f - t * 1.3f), 1.5f));
+                yield return null;
+            }
+
+            Destroy(go);
+            Destroy(go2);
+        }
+
+        // Recover — two green radiating rings that expand from the caster.
+        private IEnumerator HealGlowVFX()
+        {
+            StartCoroutine(HealRing(0f));
+            yield return StartCoroutine(HealRing(0.12f));
+        }
+
+        private IEnumerator HealRing(float delay)
+        {
+            if (delay > 0f) yield return new WaitForSeconds(delay);
+            if (_canvasRoot == null) yield break;
+
+            var go = new GameObject("HealRing");
+            go.transform.SetParent(_canvasRoot, false);
+            go.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin        = rt.anchorMax = _damageSpawnAnchor;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta        = new Vector2(70f, 70f);
+
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.3f, 1f, 0.4f, 0f);
+
+            const float Dur = 0.45f;
+            float elapsed = 0f;
+            while (elapsed < Dur)
+            {
+                elapsed += Time.deltaTime;
+                float t     = elapsed / Dur;
+                float scale = Mathf.Lerp(0.5f, 3.5f, t);
+                go.transform.localScale = new Vector3(scale, scale, 1f);
+                img.color = new Color(0.3f, 1f, 0.4f, 0.8f * Mathf.Pow(1f - t, 1.8f));
+                yield return null;
+            }
+
+            Destroy(go);
+        }
 
         // ── Impact effect ─────────────────────────────────────────────────
 
@@ -353,6 +540,7 @@ namespace Combat
         {
             var go = new GameObject("Impact");
             go.transform.SetParent(_canvasRoot, false);
+            go.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
 
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin        = rt.anchorMax = _damageSpawnAnchor;
@@ -360,8 +548,7 @@ namespace Combat
             rt.sizeDelta        = new Vector2(60f, 60f);
 
             var img = go.AddComponent<Image>();
-            img.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
-            img.color  = new Color(1f, 0.96f, 0.65f, 0f);
+            img.color = new Color(1f, 0.96f, 0.65f, 0f);
             float elapsed   = 0f;
             const float Dur = 0.30f;
             while (elapsed < Dur)

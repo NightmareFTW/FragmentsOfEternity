@@ -36,6 +36,7 @@ namespace UI
         private int[]       _cachedCooldowns;
         private bool        _isPlayerTurn;
         private bool        _combatOver;
+        private bool        _inputLocked;
         private int[]       _prevCooldowns = new int[]  { 0, 0, 0 };
         private bool[]      _shaking       = new bool[] { false, false, false };
 
@@ -91,6 +92,7 @@ namespace UI
 
         private void OnTurnStarted(TurnStartedEvent evt)
         {
+            _inputLocked  = false;   // always reset at turn boundary
             if (_turnLabel) _turnLabel.text = $"{evt.Actor.Name}'s Turn";
             _isPlayerTurn = (_player != null && evt.Actor == _player);
 
@@ -105,12 +107,10 @@ namespace UI
             if (evt.Target == _player)
             {
                 if (_playerHPLabel) StartCoroutine(DamageFlash(_playerHPLabel, _player, _playerHPColor));
-                _playerVisual?.ShowHit(evt.Damage);
             }
             else if (evt.Target == _enemy)
             {
                 if (_enemyHPLabel) StartCoroutine(DamageFlash(_enemyHPLabel, _enemy, _enemyHPColor));
-                _enemyVisual?.ShowHit(evt.Damage);
             }
         }
 
@@ -142,7 +142,7 @@ namespace UI
         private void UpdateButtonState(Button btn, int slot, int cd)
         {
             if (btn == null || _playerSkills == null || slot >= _playerSkills.Length) return;
-            bool canUse = cd == 0 && _isPlayerTurn && !_combatOver;
+            bool canUse = cd == 0 && _isPlayerTurn && !_combatOver && !_inputLocked;
 
             // Punch animation when skill first goes on cooldown
             if (cd > 0 && _prevCooldowns[slot] == 0 && !_shaking[slot])
@@ -154,7 +154,6 @@ namespace UI
                 ? $"{_playerSkills[slot].skillName} ({cd}T)"
                 : _playerSkills[slot].skillName;
             SetButtonLabel(btn, lbl);
-            Debug.Log($"[CooldownUI] {_playerSkills[slot].skillName} cooldown={cd} interactable={canUse}");
         }
 
         private void SetAllButtonsInteractable(bool value)
@@ -246,7 +245,26 @@ namespace UI
 
         private void OnSkillPressed(int slot)
         {
-            Debug.Log($"[CombatHUD] Skill {slot + 1} pressed");
+            // HUD-layer guard — BattleManager is authoritative, but this prevents
+            // queuing extra SkillSelectedEvents during the EndTurnDelayed window.
+            if (_inputLocked || !_isPlayerTurn || _combatOver)
+            {
+                return;
+            }
+
+            int cd = (_cachedCooldowns != null && slot < _cachedCooldowns.Length)
+                ? _cachedCooldowns[slot] : 0;
+            if (cd > 0)
+            {
+                Debug.Log("[Input] Skill ignored: cooldown");
+                return;
+            }
+
+            // Lock the UI immediately so buttons go grey before BattleManager even runs.
+            _inputLocked = true;
+            _tooltip?.Hide();
+            SetAllButtonsInteractable(false);
+
             EventBus.Raise(new SkillSelectedEvent { SkillSlot = slot });
         }
     }
