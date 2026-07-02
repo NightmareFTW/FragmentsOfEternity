@@ -10,5 +10,11 @@ namespace Core
     {
         public int          gems         = 3000;
         public List<string> ownedHeroIds = new List<string>();
+
+        // The (up to 4) hero ids the player has chosen to bring into battle.
+        public List<string> teamHeroIds  = new List<string>();
+
+        // Pulls since the last 5★ — drives the pity guarantee.
+        public int pityCounter;
     }
 }

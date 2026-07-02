@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Data;
 
@@ -11,9 +12,12 @@ namespace Core
         public string   Message;
     }
 
-    // Spends gems and rolls a hero from a pool. Rarer heroes are less likely.
+    // Spends gems and rolls a hero from a pool. Rarer heroes are less likely,
+    // with a pity guarantee that forces a 5★ after enough dry pulls.
     public static class GachaService
     {
+        public const int PityThreshold = 20;
+
         public static SummonResult Summon(GachaPool pool)
         {
             if (pool == null || pool.heroes == null || pool.heroes.Length == 0)
@@ -23,11 +27,16 @@ namespace Core
             if (profile.gems < pool.summonCost)
                 return Fail("Not enough gems.");
 
-            var hero = RollWeighted(pool.heroes);
+            bool pityHit = profile.pityCounter >= PityThreshold;
+            var  hero    = pityHit ? RollOfRarity(pool.heroes, 5) ?? RollWeighted(pool.heroes)
+                                   : RollWeighted(pool.heroes);
             if (hero == null)
                 return Fail("Summon pool is empty.");
 
             profile.gems -= pool.summonCost;
+            if (hero.rarity >= 5) profile.pityCounter = 0;
+            else                  profile.pityCounter++;
+
             bool isNew = !profile.ownedHeroIds.Contains(hero.heroId);
             profile.ownedHeroIds.Add(hero.heroId);
             SaveSystem.Save();
@@ -39,6 +48,22 @@ namespace Core
                 IsNew   = isNew,
                 Message = $"You summoned {hero.heroName}!"
             };
+        }
+
+        public static List<SummonResult> SummonMany(GachaPool pool, int count)
+        {
+            var results = new List<SummonResult>();
+            for (int i = 0; i < count; i++)
+            {
+                var r = Summon(pool);
+                if (!r.Success)
+                {
+                    if (results.Count == 0) results.Add(r);   // surface the reason
+                    break;
+                }
+                results.Add(r);
+            }
+            return results;
         }
 
         private static SummonResult Fail(string message) =>
@@ -58,6 +83,13 @@ namespace Core
                 if (roll < 0) return h;
             }
             return null;
+        }
+
+        private static HeroData RollOfRarity(HeroData[] heroes, int rarity)
+        {
+            var pool = new List<HeroData>();
+            foreach (var h in heroes) if (h != null && h.rarity == rarity) pool.Add(h);
+            return pool.Count == 0 ? null : pool[Random.Range(0, pool.Count)];
         }
 
         // 5★ are the rarest, 3★ the most common.

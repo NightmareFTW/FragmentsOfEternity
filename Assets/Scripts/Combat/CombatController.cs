@@ -12,6 +12,9 @@ namespace Combat
         [Header("Encounter (optional — falls back to a built-in duel if empty)")]
         [SerializeField] private EncounterData _encounter;
 
+        [Header("Roster resolver — maps the player's saved team ids to HeroData")]
+        [SerializeField] private GachaPool _heroPool;
+
         private BattleManager _battle;
 
         private void Start()
@@ -20,17 +23,18 @@ namespace Combat
             EventBus.Subscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Subscribe<SkillSelectedEvent>(OnSkillSelected);
 
-            List<Unit> allies, enemies;
-            if (_encounter != null && HasTeams(_encounter))
-            {
-                allies  = BuildTeam(_encounter.allies,  _encounter.allyLevel);
-                enemies = BuildTeam(_encounter.enemies, _encounter.enemyLevel);
-            }
-            else
-            {
-                allies  = DefaultAllies();
-                enemies = DefaultEnemies();
-            }
+            // Enemies always come from the encounter (or the built-in fallback).
+            List<Unit> enemies = (_encounter != null && _encounter.enemies != null && _encounter.enemies.Length > 0)
+                ? BuildTeam(_encounter.enemies, _encounter.enemyLevel)
+                : DefaultEnemies();
+
+            // Allies: the player's chosen roster if they have one, else the
+            // encounter's fixed allies, else a built-in starter.
+            List<Unit> allies = BuildPlayerTeam();
+            if (allies == null || allies.Count == 0)
+                allies = (_encounter != null && _encounter.allies != null && _encounter.allies.Length > 0)
+                    ? BuildTeam(_encounter.allies, _encounter.allyLevel)
+                    : DefaultAllies();
 
             _battle = gameObject.AddComponent<BattleManager>();
             _battle.Init(allies, enemies);
@@ -38,8 +42,34 @@ namespace Combat
 
         // ── Team construction ───────────────────────────────────────────────
 
-        private static bool HasTeams(EncounterData e) =>
-            e.allies != null && e.allies.Length > 0 && e.enemies != null && e.enemies.Length > 0;
+        // The player's saved team, resolved from the gacha pool. Null when there
+        // is no pool wired or no team picked yet.
+        private List<Unit> BuildPlayerTeam()
+        {
+            if (_heroPool == null || _heroPool.heroes == null) return null;
+
+            var ids = SaveSystem.Profile.teamHeroIds;
+            if (ids == null || ids.Count == 0) return null;
+
+            int level = _encounter != null ? _encounter.allyLevel : 1;
+            var units = new List<Unit>();
+            foreach (var id in ids)
+            {
+                var h = HeroById(id);
+                if (h == null) continue;
+                var u = Unit.FromHeroData(h, level);
+                u.SetSkills(h.Skills());
+                units.Add(u);
+            }
+            return units;
+        }
+
+        private HeroData HeroById(string id)
+        {
+            foreach (var h in _heroPool.heroes)
+                if (h != null && h.heroId == id) return h;
+            return null;
+        }
 
         private static List<Unit> BuildTeam(HeroData[] heroes, int level)
         {

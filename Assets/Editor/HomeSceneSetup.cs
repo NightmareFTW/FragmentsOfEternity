@@ -41,23 +41,29 @@ namespace RPG.EditorTools
                 new Color(0.6f, 0.9f, 1f));
 
             var result = MakeText(canvas.transform, "ResultLabel", "",
-                new Vector2(0.05f, 0.60f), new Vector2(0.95f, 0.70f), 46, FontStyle.Bold, Color.white);
+                new Vector2(0.05f, 0.725f), new Vector2(0.95f, 0.79f), 44, FontStyle.Bold, Color.white);
 
-            var collection = MakeText(canvas.transform, "CollectionLabel", "Collection",
-                new Vector2(0.10f, 0.30f), new Vector2(0.90f, 0.58f), 28, FontStyle.Normal,
-                new Color(0.85f, 0.9f, 1f));
-            collection.alignment = TextAnchor.UpperLeft;
+            var team = MakeText(canvas.transform, "TeamLabel", "Team: 0/4",
+                new Vector2(0.05f, 0.665f), new Vector2(0.95f, 0.712f), 28, FontStyle.Bold,
+                new Color(1f, 0.85f, 0.4f));
 
-            var summon = MakeButton(canvas.transform, "SummonButton", "SUMMON  (300)",
-                new Vector2(0.18f, 0.195f), new Vector2(0.82f, 0.275f),
+            var grid = MakeContainer(canvas.transform, "CollectionGrid",
+                new Vector2(0.06f, 0.30f), new Vector2(0.94f, 0.655f));
+
+            var summon = MakeButton(canvas.transform, "SummonButton", "SUMMON (300)",
+                new Vector2(0.06f, 0.205f), new Vector2(0.48f, 0.28f),
                 new Color(0.45f, 0.30f, 0.65f));
 
+            var summon10 = MakeButton(canvas.transform, "Summon10Button", "SUMMON x10",
+                new Vector2(0.52f, 0.205f), new Vector2(0.94f, 0.28f),
+                new Color(0.35f, 0.24f, 0.55f));
+
             var battle = MakeButton(canvas.transform, "BattleButton", "BATTLE",
-                new Vector2(0.18f, 0.095f), new Vector2(0.82f, 0.175f),
+                new Vector2(0.18f, 0.10f), new Vector2(0.82f, 0.18f),
                 new Color(0.20f, 0.42f, 0.60f));
 
             var reset = MakeButton(canvas.transform, "ResetButton", "Reset",
-                new Vector2(0.72f, 0.015f), new Vector2(0.97f, 0.065f),
+                new Vector2(0.72f, 0.02f), new Vector2(0.97f, 0.07f),
                 new Color(0.30f, 0.16f, 0.18f));
 
             // ── Wire controller ───────────────────────────────────────────
@@ -67,12 +73,14 @@ namespace RPG.EditorTools
 
             var so = new SerializedObject(ctrl);
             if (pool != null) so.FindProperty("_pool").objectReferenceValue = pool;
-            so.FindProperty("_gemsLabel").objectReferenceValue       = gems;
-            so.FindProperty("_collectionLabel").objectReferenceValue = collection;
-            so.FindProperty("_resultLabel").objectReferenceValue     = result;
-            so.FindProperty("_summonButton").objectReferenceValue    = summon;
-            so.FindProperty("_battleButton").objectReferenceValue    = battle;
-            so.FindProperty("_resetButton").objectReferenceValue     = reset;
+            so.FindProperty("_gemsLabel").objectReferenceValue      = gems;
+            so.FindProperty("_teamLabel").objectReferenceValue      = team;
+            so.FindProperty("_resultLabel").objectReferenceValue    = result;
+            so.FindProperty("_summonButton").objectReferenceValue   = summon;
+            so.FindProperty("_summon10Button").objectReferenceValue = summon10;
+            so.FindProperty("_battleButton").objectReferenceValue   = battle;
+            so.FindProperty("_resetButton").objectReferenceValue    = reset;
+            so.FindProperty("_gridContainer").objectReferenceValue  = grid;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -129,6 +137,15 @@ namespace RPG.EditorTools
         }
 
         // ── Helpers ─────────────────────────────────────────────────────────
+
+        static RectTransform MakeContainer(Transform parent, string name, Vector2 aMin, Vector2 aMax)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = aMin; rt.anchorMax = aMax; rt.offsetMin = rt.offsetMax = Vector2.zero;
+            return rt;
+        }
 
         static void MakeImage(Transform parent, string name, Vector2 aMin, Vector2 aMax, Color color)
         {

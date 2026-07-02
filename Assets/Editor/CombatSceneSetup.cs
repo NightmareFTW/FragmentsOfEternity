@@ -88,12 +88,17 @@ namespace RPG.EditorTools
             var go         = new GameObject("CombatController");
             var controller = go.AddComponent<Combat.CombatController>();
 
-            // Wire the encounter if it exists (created via RPG → Create Starter
-            // Content). If absent, CombatController falls back to a built-in duel.
-            if (encounter != null)
+            // Wire the encounter and the gacha pool (used to resolve the player's
+            // saved team ids into HeroData). Both are optional — CombatController
+            // falls back to the encounter allies or a built-in duel.
+            var pool = AssetDatabase.LoadAssetAtPath<Data.GachaPool>(
+                "Assets/ScriptableObjects/GachaPool.asset");
+
+            if (encounter != null || pool != null)
             {
                 var so = new SerializedObject(controller);
-                so.FindProperty("_encounter").objectReferenceValue = encounter;
+                if (encounter != null) so.FindProperty("_encounter").objectReferenceValue = encounter;
+                if (pool != null)      so.FindProperty("_heroPool").objectReferenceValue   = pool;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
         }
