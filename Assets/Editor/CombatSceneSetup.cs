@@ -83,8 +83,24 @@ namespace RPG.EditorTools
 
         static void BuildCombatController()
         {
-            var go = new GameObject("CombatController");
-            go.AddComponent<Combat.CombatController>();
+            var go         = new GameObject("CombatController");
+            var controller = go.AddComponent<Combat.CombatController>();
+
+            // Wire starter HeroData assets if they exist (created via
+            // RPG → Create Starter Content). If absent, CombatController falls
+            // back to its built-in starter units, so the scene still plays.
+            var playerHero = AssetDatabase.LoadAssetAtPath<Data.HeroData>(
+                "Assets/ScriptableObjects/Heroes/Hero.asset");
+            var enemyHero = AssetDatabase.LoadAssetAtPath<Data.HeroData>(
+                "Assets/ScriptableObjects/Heroes/Goblin.asset");
+
+            if (playerHero != null || enemyHero != null)
+            {
+                var so = new SerializedObject(controller);
+                if (playerHero != null) so.FindProperty("_playerHero").objectReferenceValue = playerHero;
+                if (enemyHero  != null) so.FindProperty("_enemyHero").objectReferenceValue  = enemyHero;
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         static GameObject BuildCanvas()

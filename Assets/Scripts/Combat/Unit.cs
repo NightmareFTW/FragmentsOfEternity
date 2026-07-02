@@ -13,28 +13,81 @@ namespace Combat
 
     public class Unit
     {
-        public string Name      { get; }
-        public int    MaxHP     { get; }
-        public int    HP        { get; private set; }
-        public int    Speed     { get; }
-        public float  TurnMeter { get; private set; }
+        public string Name       { get; }
+        public int    MaxHP      { get; }
+        public int    HP         { get; private set; }
+        public int    BaseAttack  { get; }
+        public int    BaseDefense { get; }
+        public int    BaseSpeed   { get; }
+        public float  CritRate   { get; }
+        public float  CritDamage { get; }
+        public float  TurnMeter  { get; private set; }
 
         public bool IsAlive => HP > 0;
         public bool IsReady => TurnMeter >= 100f;
 
         private readonly List<ActiveStatusEffect> _activeEffects = new();
 
-        public Unit(string name, int hp, int speed)
+        public Unit(string name, int hp, int speed,
+                    int attack = 100, int defense = 50,
+                    float critRate = 0.05f, float critDamage = 1.5f)
         {
-            Name  = name;
-            MaxHP = hp;
-            HP    = hp;
-            Speed = speed;
+            Name        = name;
+            MaxHP       = hp;
+            HP          = hp;
+            BaseSpeed   = speed;
+            BaseAttack  = attack;
+            BaseDefense = defense;
+            CritRate    = critRate;
+            CritDamage  = critDamage;
         }
+
+        // Builds a combat Unit from a HeroData asset, applying per-level growth.
+        // Level 1 uses the base stats as-authored.
+        public static Unit FromHeroData(HeroData data, int level = 1)
+        {
+            int lv  = Mathf.Max(1, level);
+            int hp  = Mathf.RoundToInt(data.baseHP  + data.hpGrowth  * (lv - 1));
+            int atk = Mathf.RoundToInt(data.baseATK + data.atkGrowth * (lv - 1));
+            int def = Mathf.RoundToInt(data.baseDEF + data.defGrowth * (lv - 1));
+            string name = string.IsNullOrEmpty(data.heroName) ? data.name : data.heroName;
+
+            return new Unit(name, hp, data.baseSPD, atk, def,
+                            data.baseCritRate, data.baseCritDamage);
+        }
+
+        // ── Effective stats (base × active status modifiers) ────────────────
+
+        public int EffectiveAttack =>
+            Mathf.Max(1, Mathf.RoundToInt(BaseAttack *
+                (1f + PercentMod(StatusEffectType.AttackUp, StatusEffectType.AttackDebuff))));
+
+        public int EffectiveDefense =>
+            Mathf.Max(0, Mathf.RoundToInt(BaseDefense *
+                (1f + PercentMod(StatusEffectType.DefenseUp, StatusEffectType.DefenseDebuff))));
+
+        public float EffectiveSpeed =>
+            Mathf.Max(1f, BaseSpeed *
+                (1f + PercentMod(StatusEffectType.SpeedBuff, StatusEffectType.SpeedDebuff)));
+
+        // Net modifier as a fraction: sum of "up" percents minus "down" percents.
+        // Effect.Value is stored as whole percent (e.g. 20 → +0.20).
+        private float PercentMod(StatusEffectType up, StatusEffectType down)
+        {
+            float m = 0f;
+            foreach (var e in _activeEffects)
+            {
+                if (e.Type == up)   m += e.Value / 100f;
+                if (e.Type == down) m -= e.Value / 100f;
+            }
+            return m;
+        }
+
+        // ── Meter / HP ──────────────────────────────────────────────────────
 
         public void AdvanceMeter(float dt)
         {
-            if (IsAlive) TurnMeter += Speed * dt;
+            if (IsAlive) TurnMeter += EffectiveSpeed * dt;
         }
 
         public void ConsumeMeter() => TurnMeter = 0f;
@@ -43,6 +96,8 @@ namespace Combat
         {
             int actual = Mathf.Min(amount, HP);
             HP = Mathf.Max(0, HP - amount);
+            // Direct hits rouse a sleeping unit.
+            RemoveEffects(StatusEffectType.Sleep);
             return actual;
         }
 
@@ -53,17 +108,42 @@ namespace Combat
             return actual;
         }
 
+        // ── Status effects ──────────────────────────────────────────────────
+
+        public bool IsStunned  => HasEffect(StatusEffectType.Stun) || HasEffect(StatusEffectType.Sleep);
+        public bool IsSilenced => HasEffect(StatusEffectType.Silence);
+
         public void AddEffect(StatusEffectEntry entry)
         {
+            if (entry == null || entry.type == StatusEffectType.None) return;
             _activeEffects.Add(new ActiveStatusEffect
             {
                 Type     = entry.type,
-                Duration = entry.duration,
+                Duration = Mathf.Max(1, entry.duration),
                 Value    = entry.value
             });
-            Debug.Log($"{Name} gained {entry.type} ({entry.duration}T)");
+            Debug.Log($"{Name} gained {entry.type} ({entry.duration}T, {entry.value})");
         }
 
+        // Poison/Burn/Bleed each deal their Value straight to HP (ignores DEF).
+        // Returns the total dealt so the caller can drive UI feedback.
+        public int TickDamageOverTime()
+        {
+            int total = 0;
+            foreach (var e in _activeEffects)
+                if (e.Type == StatusEffectType.Poison ||
+                    e.Type == StatusEffectType.Burn   ||
+                    e.Type == StatusEffectType.Bleed)
+                    total += Mathf.Max(0, e.Value);
+
+            if (total <= 0) return 0;
+            int actual = Mathf.Min(total, HP);
+            HP = Mathf.Max(0, HP - total);
+            return actual;
+        }
+
+        // Decrement every effect's remaining duration; drop the expired ones.
+        // Called exactly once per the unit's own turn.
         public void TickEffects()
         {
             for (int i = _activeEffects.Count - 1; i >= 0; i--)
@@ -75,6 +155,18 @@ namespace Combat
                     _activeEffects.RemoveAt(i);
                 }
             }
+        }
+
+        private bool HasEffect(StatusEffectType t)
+        {
+            foreach (var e in _activeEffects) if (e.Type == t) return true;
+            return false;
+        }
+
+        private void RemoveEffects(StatusEffectType t)
+        {
+            for (int i = _activeEffects.Count - 1; i >= 0; i--)
+                if (_activeEffects[i].Type == t) _activeEffects.RemoveAt(i);
         }
 
         public List<ActiveStatusEffect> GetEffects() => _activeEffects;

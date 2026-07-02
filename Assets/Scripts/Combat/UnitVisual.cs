@@ -99,10 +99,18 @@ namespace Combat
         private void OnUnitDamagedAnim(UnitDamagedEvent evt)
         {
             if (_trackedUnit == null) return;
+
+            // Damage-over-time has no attacker — only the victim reacts, no lunge.
+            if (evt.IsDoT)
+            {
+                if (evt.Target == _trackedUnit) ShowDoT(evt.Damage);
+                return;
+            }
+
             if (evt.Target != _trackedUnit)
                 PlayAttackAnimation();
             else
-                ShowHit(evt.Damage);
+                ShowHit(evt.Damage, evt.IsCrit);
         }
 
         // Self-heal is still an action; the caster should lunge.
@@ -155,7 +163,7 @@ namespace Combat
 
         // ── Public surface ────────────────────────────────────────────────
 
-        public void ShowHit(int damage)
+        public void ShowHit(int damage, bool isCrit = false)
         {
             string unitName = _trackedUnit?.Name ?? "?";
 
@@ -179,7 +187,28 @@ namespace Combat
             _pendingSkillVFX = null;
             PlayHitReaction();
             if (_canvasRoot) StartCoroutine(ScreenFlashAnim());
-            if (_canvasRoot) StartCoroutine(SpawnDamageNumber(damage));
+            if (_canvasRoot) StartCoroutine(SpawnDamageNumber(
+                damage,
+                isCrit ? new Color(1f, 0.35f, 0.20f) : new Color(1f, 0.9f, 0.15f),
+                isCrit ? 66 : 48,
+                isCrit));
+        }
+
+        // Lightweight feedback for damage-over-time: a coloured number and a
+        // brief tint, without the hit-stop / screen-shake of a real hit.
+        private void ShowDoT(int damage)
+        {
+            if (_canvasRoot) StartCoroutine(SpawnDamageNumber(
+                damage, new Color(0.55f, 0.90f, 0.35f), 40, false));
+            if (_image) StartCoroutine(DoTTint());
+        }
+
+        private IEnumerator DoTTint()
+        {
+            if (_image == null) yield break;
+            _image.color = new Color(0.55f, 0.90f, 0.35f);
+            yield return new WaitForSeconds(0.12f);
+            _image.color = _originalColor;
         }
 
         // ── Idle breathing ────────────────────────────────────────────────
@@ -638,23 +667,39 @@ namespace Combat
 
         private static Color GetIconColor(StatusEffectType t) => t switch
         {
-            StatusEffectType.AttackUp  => new Color(0.75f, 0.22f, 0.10f),
-            StatusEffectType.DefenseUp => new Color(0.10f, 0.35f, 0.75f),
-            StatusEffectType.Poison    => new Color(0.38f, 0.10f, 0.60f),
-            _                          => new Color(0.20f, 0.20f, 0.20f),
+            StatusEffectType.AttackUp      => new Color(0.75f, 0.22f, 0.10f),
+            StatusEffectType.AttackDebuff  => new Color(0.45f, 0.20f, 0.28f),
+            StatusEffectType.DefenseUp     => new Color(0.10f, 0.35f, 0.75f),
+            StatusEffectType.DefenseDebuff => new Color(0.20f, 0.28f, 0.42f),
+            StatusEffectType.SpeedBuff     => new Color(0.15f, 0.55f, 0.45f),
+            StatusEffectType.SpeedDebuff   => new Color(0.30f, 0.35f, 0.30f),
+            StatusEffectType.Poison        => new Color(0.38f, 0.10f, 0.60f),
+            StatusEffectType.Burn          => new Color(0.80f, 0.30f, 0.08f),
+            StatusEffectType.Bleed         => new Color(0.60f, 0.08f, 0.12f),
+            StatusEffectType.Stun          => new Color(0.85f, 0.70f, 0.15f),
+            StatusEffectType.Sleep         => new Color(0.30f, 0.30f, 0.55f),
+            _                              => new Color(0.20f, 0.20f, 0.20f),
         };
 
         private static string GetIconLetter(StatusEffectType t) => t switch
         {
-            StatusEffectType.AttackUp  => "A",
-            StatusEffectType.DefenseUp => "D",
-            StatusEffectType.Poison    => "P",
-            _                          => t.ToString().Substring(0, 1),
+            StatusEffectType.AttackUp      => "A+",
+            StatusEffectType.AttackDebuff  => "A-",
+            StatusEffectType.DefenseUp     => "D+",
+            StatusEffectType.DefenseDebuff => "D-",
+            StatusEffectType.SpeedBuff     => "S+",
+            StatusEffectType.SpeedDebuff   => "S-",
+            StatusEffectType.Poison        => "PSN",
+            StatusEffectType.Burn          => "BRN",
+            StatusEffectType.Bleed         => "BLD",
+            StatusEffectType.Stun          => "STN",
+            StatusEffectType.Sleep         => "SLP",
+            _                              => t.ToString().Substring(0, 1),
         };
 
         // ── Floating damage number ────────────────────────────────────────
 
-        private IEnumerator SpawnDamageNumber(int damage)
+        private IEnumerator SpawnDamageNumber(int damage, Color color, int fontSize, bool isCrit)
         {
             var go = new GameObject("DmgNum");
             go.transform.SetParent(_canvasRoot, false);
@@ -662,21 +707,30 @@ namespace Combat
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin        = rt.anchorMax = _damageSpawnAnchor;
             rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta        = new Vector2(160f, 70f);
+            rt.sizeDelta        = new Vector2(180f, 80f);
 
             var txt = go.AddComponent<Text>();
             txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            txt.text = $"-{damage}"; txt.fontSize = 48; txt.fontStyle = FontStyle.Bold;
-            txt.alignment = TextAnchor.MiddleCenter; txt.color = new Color(1f, 0.9f, 0.15f);
+            txt.text = isCrit ? $"-{damage}!" : $"-{damage}";
+            txt.fontSize = fontSize; txt.fontStyle = FontStyle.Bold;
+            txt.alignment = TextAnchor.MiddleCenter; txt.color = color;
 
-            float elapsed        = 0f;
-            const float Duration = 0.75f;
-            while (elapsed < Duration)
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor    = new Color(0f, 0f, 0f, 0.6f);
+            shadow.effectDistance = new Vector2(2f, -2f);
+
+            float rise     = isCrit ? 150f : 120f;
+            float duration = isCrit ? 0.90f : 0.75f;
+            float pop       = isCrit ? 1.4f : 1f;
+            float elapsed  = 0f;
+            while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                float t = elapsed / Duration;
-                rt.anchoredPosition = new Vector2(0f, Mathf.Lerp(0f, 120f, t));
-                txt.color           = new Color(1f, 0.9f, 0.15f, 1f - t);
+                float t = elapsed / duration;
+                rt.anchoredPosition = new Vector2(0f, Mathf.Lerp(0f, rise, t));
+                float s = Mathf.Lerp(pop, 1f, Mathf.Clamp01(t * 3f));
+                go.transform.localScale = new Vector3(s, s, 1f);
+                txt.color = new Color(color.r, color.g, color.b, 1f - t);
                 yield return null;
             }
 

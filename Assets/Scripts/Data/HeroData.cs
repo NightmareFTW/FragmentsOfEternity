@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Data
@@ -32,6 +33,16 @@ namespace Data
         public SkillData skill1;
         public SkillData skill2;
         public SkillData skill3;
+
+        // The assigned skill slots, in order, skipping any left empty.
+        public SkillData[] Skills()
+        {
+            var list = new List<SkillData>(3);
+            if (skill1 != null) list.Add(skill1);
+            if (skill2 != null) list.Add(skill2);
+            if (skill3 != null) list.Add(skill3);
+            return list.ToArray();
+        }
     }
 
     public enum Element  { Fire, Ice, Earth, Light, Dark }
