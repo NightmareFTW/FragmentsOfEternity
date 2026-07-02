@@ -8,72 +8,98 @@ namespace Combat
 {
     public class BattleManager : MonoBehaviour
     {
-        public Unit Player { get; private set; }
-        public Unit Enemy  { get; private set; }
+        public IReadOnlyList<Unit> Allies  => _allies;
+        public IReadOnlyList<Unit> Enemies => _enemies;
 
-        private readonly List<Unit> _units = new();
-        private SkillData[] _skills;
-        private int[]       _cooldowns;
-        private Unit _currentTarget;
+        private readonly List<Unit> _allies  = new();
+        private readonly List<Unit> _enemies = new();
+        private readonly List<Unit> _units   = new();   // everyone, for turn order
+
+        private Unit _activeAlly;      // ally currently awaiting player input
+        private Unit _currentTarget;   // highlighted enemy target
         private bool _awaitingInput;
         private bool _combatOver;
 
-        public void Init(Unit player, Unit enemy, SkillData[] skills)
+        public void Init(List<Unit> allies, List<Unit> enemies)
         {
-            Player     = player;
-            Enemy      = enemy;
-            _skills    = skills;
-            _cooldowns = new int[skills.Length];   // all zeros
-            _units.Add(player);
-            _units.Add(enemy);
-            EventBus.Raise(new CombatInitEvent { Player = player, Enemy = enemy, PlayerSkills = skills });
-            RaiseCooldowns();   // give HUD the initial zero state so labels are set up
+            RegisterTeam(allies,  Team.Player);
+            RegisterTeam(enemies, Team.Enemy);
+            _units.AddRange(_allies);
+            _units.AddRange(_enemies);
+
+            EventBus.Raise(new CombatInitEvent { Allies = _allies, Enemies = _enemies });
             StartCoroutine(TickLoop());
         }
 
+        private void RegisterTeam(List<Unit> team, Team side)
+        {
+            for (int i = 0; i < team.Count; i++)
+            {
+                team[i].Team = side;
+                team[i].Slot = i;
+                (side == Team.Player ? _allies : _enemies).Add(team[i]);
+            }
+        }
+
+        // ── Player input ────────────────────────────────────────────────────
+
         public void UseSkill(int slot)
         {
-            if (_combatOver) return;
-            if (!_awaitingInput) return;
-            if (_skills == null || slot < 0 || slot >= _skills.Length) return;
+            if (_combatOver || !_awaitingInput || _activeAlly == null) return;
+            if (slot < 0 || slot >= _activeAlly.Skills.Length) return;
+            if (!_activeAlly.IsSkillReady(slot)) return;
 
-            var skill = _skills[slot];
-
-            if (_cooldowns[slot] > 0)
-                return;   // keep awaiting input — player can still choose another skill
-
-            // Lock input immediately so any re-clicks during EndTurnDelayed are rejected.
-            // This must happen before executing the skill so re-entrant calls fail the
-            // !_awaitingInput guard even if they arrive in the same frame.
             _awaitingInput = false;
 
-            var dmgTarget = _currentTarget ?? Enemy;
-            EventBus.Raise(new SkillUsedEvent { Skill = skill, Caster = Player, Target = dmgTarget });
+            var skill  = _activeAlly.Skills[slot];
+            var target = ResolveTarget(skill, _activeAlly);
+            ExecuteSkill(_activeAlly, target, skill);
+            _activeAlly.PutOnCooldown(slot);
+            RaiseCooldowns(_activeAlly);
+            StartCoroutine(EndTurnDelayed());
+        }
+
+        // Auto-targeting for now (manual selection lands in the next part):
+        // heal   → the most-wounded ally (self included);
+        // damage → the highlighted enemy, else the first alive enemy.
+        private Unit ResolveTarget(SkillData skill, Unit caster)
+        {
+            if (skill != null && skill.skillType == SkillType.Buff)
+                return caster;
+            if (skill != null && skill.skillType == SkillType.Heal)
+                return MostWounded(_allies) ?? caster;
+
+            if (_currentTarget != null && _currentTarget.IsAlive && _currentTarget.Team == Team.Enemy)
+                return _currentTarget;
+            return FirstAlive(_enemies);
+        }
+
+        private void ExecuteSkill(Unit caster, Unit target, SkillData skill)
+        {
+            if (skill == null || target == null) return;
+            EventBus.Raise(new SkillUsedEvent { Skill = skill, Caster = caster, Target = target });
 
             switch (skill.skillType)
             {
                 case SkillType.Damage:
                     int roll   = Random.Range(skill.minValue, skill.maxValue + 1);
-                    int dmg    = ComputeDamage(Player, dmgTarget, roll, skill.canCrit, out bool crit);
-                    int actual = dmgTarget.TakeDamage(dmg);
-                    EventBus.Raise(new UnitDamagedEvent { Target = dmgTarget, Damage = actual, IsCrit = crit });
-                    ApplyEffects(skill.onHitEffects, dmgTarget);
+                    int dmg    = ComputeDamage(caster, target, roll, skill.canCrit, out bool crit);
+                    int actual = target.TakeDamage(dmg);
+                    EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit });
+                    ApplyEffects(skill.onHitEffects, target);
                     break;
 
                 case SkillType.Heal:
                     int heal   = Random.Range(skill.minValue, skill.maxValue + 1);
-                    int healed = Player.Heal(heal);
-                    EventBus.Raise(new UnitHealedEvent { Target = Player, Amount = healed });
+                    int healed = target.Heal(heal);
+                    EventBus.Raise(new UnitHealedEvent { Target = target, Amount = healed });
                     break;
 
                 case SkillType.Buff:
                     break;
             }
 
-            ApplyEffects(skill.onSelfEffects, Player);
-            _cooldowns[slot] = skill.cooldownTurns;
-            RaiseCooldowns();                    // UI sees cooldown set immediately
-            StartCoroutine(EndTurnDelayed());
+            ApplyEffects(skill.onSelfEffects, caster);
         }
 
         private IEnumerator EndTurnDelayed()
@@ -82,11 +108,11 @@ namespace Combat
             EndTurn();
         }
 
-        // ── Tick loop ─────────────────────────────────────────────────────
+        // ── Tick loop ───────────────────────────────────────────────────────
 
         private IEnumerator TickLoop()
         {
-            while (Player.IsAlive && Enemy.IsAlive)
+            while (TeamAlive(_allies) && TeamAlive(_enemies))
             {
                 if (_awaitingInput) { yield return null; continue; }
 
@@ -101,7 +127,7 @@ namespace Combat
 
             _combatOver = true;
             ClearTarget();
-            EventBus.Raise(new CombatEndEvent { Victory = !Enemy.IsAlive });
+            EventBus.Raise(new CombatEndEvent { Victory = !TeamAlive(_enemies) });
         }
 
         private IEnumerator ExecuteTurn(Unit actor)
@@ -117,8 +143,7 @@ namespace Combat
             }
             if (!actor.IsAlive) { EndTurn(); yield break; }
 
-            // Snapshot control state BEFORE durations tick down this turn, so a
-            // 1-turn stun costs exactly one action before it expires.
+            // Snapshot control state BEFORE durations tick down this turn.
             bool stunned = actor.IsStunned;
             actor.TickEffects();
             EventBus.Raise(new StatusEffectAppliedEvent { Target = actor });
@@ -132,60 +157,30 @@ namespace Combat
                 yield break;
             }
 
-            if (actor == Enemy)
+            if (actor.Team == Team.Enemy)
             {
                 EventBus.Raise(new TurnStartedEvent { Actor = actor });
-                yield return new WaitForSeconds(0.8f);
-                EnemyAct();
+                yield return new WaitForSeconds(0.7f);
+                EnemyAct(actor);
                 yield return new WaitForSeconds(0.5f);
                 EndTurn();
             }
             else
             {
-                // Tick cooldowns BEFORE announcing the turn — UI caches ticked values
-                // before TurnStartedEvent causes the HUD to enable buttons.
-                TickCooldowns();
-                EventBus.Raise(new TurnStartedEvent { Actor = actor });
-                _currentTarget = Enemy;
-                EventBus.Raise(new TargetChangedEvent { Target = Enemy });
+                actor.TickCooldowns();
+                _activeAlly = actor;
+                RaiseCooldowns(actor);                                    // HUD caches ticked cooldowns
+                EventBus.Raise(new TurnStartedEvent { Actor = actor });   // then enables buttons
+                _currentTarget = FirstAlive(_enemies);
+                EventBus.Raise(new TargetChangedEvent { Target = _currentTarget });
                 _awaitingInput = true;
             }
-        }
-
-        // ── Combat math ────────────────────────────────────────────────────
-        // Skill power (roll) is scaled by attacker ATK, then mitigated by the
-        // target's DEF via a classic armour curve, then optionally crit-boosted.
-        private int ComputeDamage(Unit caster, Unit target, int roll, bool canCrit, out bool isCrit)
-        {
-            float raw       = roll * (caster.EffectiveAttack / 100f);
-            float mitigated = raw * (100f / (100f + target.EffectiveDefense));
-            isCrit = canCrit && Random.value < caster.CritRate;
-            if (isCrit) mitigated *= caster.CritDamage;
-            return Mathf.Max(1, Mathf.RoundToInt(mitigated));
-        }
-
-        // Enemy AI: mostly attacks; occasionally weakens the hero's attack instead.
-        private void EnemyAct()
-        {
-            if (Random.value < 0.30f)
-            {
-                Player.AddEffect(new StatusEffectEntry
-                {
-                    type = StatusEffectType.AttackDebuff, duration = 2, value = 25
-                });
-                EventBus.Raise(new StatusEffectAppliedEvent { Target = Player });
-                return;
-            }
-
-            int roll   = Random.Range(10, 17);
-            int dmg    = ComputeDamage(Enemy, Player, roll, true, out bool crit);
-            int actual = Player.TakeDamage(dmg);
-            EventBus.Raise(new UnitDamagedEvent { Target = Player, Damage = actual, IsCrit = crit });
         }
 
         private void EndTurn()
         {
             _awaitingInput = false;
+            _activeAlly    = null;
             ClearTarget();
         }
 
@@ -195,23 +190,53 @@ namespace Combat
             EventBus.Raise(new TargetChangedEvent { Target = null });
         }
 
-        private void TickCooldowns()
+        // ── Enemy AI ────────────────────────────────────────────────────────
+
+        private void EnemyAct(Unit enemy)
         {
-            for (int i = 0; i < _cooldowns.Length; i++)
-                if (_cooldowns[i] > 0) _cooldowns[i]--;
-            RaiseCooldowns();
+            Unit hero = RandomAlive(_allies);
+            if (hero == null) return;
+
+            SkillData skill = PickEnemySkill(enemy);
+            if (skill != null)
+            {
+                Unit target = skill.skillType == SkillType.Heal ? enemy : hero;
+                ExecuteSkill(enemy, target, skill);
+                enemy.PutOnCooldown(System.Array.IndexOf(enemy.Skills, skill));
+            }
+            else
+            {
+                // No skills authored → a plain basic attack.
+                int roll   = Random.Range(10, 17);
+                int dmg    = ComputeDamage(enemy, hero, roll, true, out bool crit);
+                int actual = hero.TakeDamage(dmg);
+                EventBus.Raise(new UnitDamagedEvent { Target = hero, Damage = actual, IsCrit = crit });
+            }
         }
 
-        private void RaiseCooldowns() =>
-            EventBus.Raise(new SkillCooldownsChangedEvent
-            {
-                Skills    = _skills,
-                Cooldowns = (int[])_cooldowns.Clone()
-            });
+        private SkillData PickEnemySkill(Unit enemy)
+        {
+            var ready = new List<int>();
+            for (int i = 0; i < enemy.Skills.Length; i++)
+                if (enemy.Skills[i] != null && enemy.IsSkillReady(i)) ready.Add(i);
+            if (ready.Count == 0) return null;
+            return enemy.Skills[ready[Random.Range(0, ready.Count)]];
+        }
+
+        // ── Combat math ──────────────────────────────────────────────────────
+
+        private int ComputeDamage(Unit caster, Unit target, int roll, bool canCrit, out bool isCrit)
+        {
+            float raw       = roll * (caster.EffectiveAttack / 100f);
+            float mitigated = raw * (100f / (100f + target.EffectiveDefense));
+            isCrit = canCrit && Random.value < caster.CritRate;
+            if (isCrit) mitigated *= caster.CritDamage;
+            return Mathf.Max(1, Mathf.RoundToInt(mitigated));
+        }
 
         private void ApplyEffects(StatusEffectEntry[] effects, Unit target)
         {
-            if (effects == null || effects.Length == 0) return;
+            if (effects == null || effects.Length == 0 || target == null) return;
             foreach (var e in effects)
             {
                 target.AddEffect(e);
@@ -219,23 +244,65 @@ namespace Combat
             }
         }
 
+        private void RaiseCooldowns(Unit ally) =>
+            EventBus.Raise(new SkillCooldownsChangedEvent
+            {
+                Owner     = ally,
+                Skills    = ally.Skills,
+                Cooldowns = ally.CooldownSnapshot()
+            });
+
+        // ── Team helpers ──────────────────────────────────────────────────────
+
         private Unit NextReady()
         {
             Unit best = null;
             foreach (var u in _units)
-                if (u.IsReady && (best == null || u.TurnMeter > best.TurnMeter))
+                if (u.IsAlive && u.IsReady && (best == null || u.TurnMeter > best.TurnMeter))
                     best = u;
             return best;
+        }
+
+        private static bool TeamAlive(List<Unit> team)
+        {
+            foreach (var u in team) if (u.IsAlive) return true;
+            return false;
+        }
+
+        private static Unit FirstAlive(List<Unit> team)
+        {
+            foreach (var u in team) if (u.IsAlive) return u;
+            return null;
+        }
+
+        private static Unit RandomAlive(List<Unit> team)
+        {
+            var alive = new List<Unit>();
+            foreach (var u in team) if (u.IsAlive) alive.Add(u);
+            return alive.Count == 0 ? null : alive[Random.Range(0, alive.Count)];
+        }
+
+        private static Unit MostWounded(List<Unit> team)
+        {
+            Unit  worst      = null;
+            float worstRatio = 1f;
+            foreach (var u in team)
+            {
+                if (!u.IsAlive) continue;
+                float ratio = (float)u.HP / u.MaxHP;
+                if (worst == null || ratio < worstRatio) { worst = u; worstRatio = ratio; }
+            }
+            return worst;
         }
     }
 
     public struct SkillUsedEvent              { public SkillData Skill; public Unit Caster; public Unit Target; }
-    public struct CombatInitEvent            { public Unit Player; public Unit Enemy; public SkillData[] PlayerSkills; }
+    public struct CombatInitEvent            { public List<Unit> Allies; public List<Unit> Enemies; }
     public struct TurnStartedEvent           { public Unit Actor; }
     public struct UnitDamagedEvent           { public Unit Target; public int Damage; public bool IsCrit; public bool IsDoT; }
     public struct UnitHealedEvent            { public Unit Target; public int Amount; }
     public struct UnitStunnedEvent           { public Unit Actor; }
     public struct TargetChangedEvent         { public Unit Target; }
-    public struct SkillCooldownsChangedEvent  { public SkillData[] Skills; public int[] Cooldowns; }
+    public struct SkillCooldownsChangedEvent  { public Unit Owner; public SkillData[] Skills; public int[] Cooldowns; }
     public struct StatusEffectAppliedEvent    { public Unit Target; }
 }

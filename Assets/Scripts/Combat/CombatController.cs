@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Core;
 using Data;
@@ -6,11 +7,8 @@ namespace Combat
 {
     public class CombatController : MonoBehaviour
     {
-        [Header("Combatants (optional — falls back to built-in starters if empty)")]
-        [SerializeField] private HeroData _playerHero;
-        [SerializeField] private HeroData _enemyHero;
-        [SerializeField] private int _playerLevel = 1;
-        [SerializeField] private int _enemyLevel  = 1;
+        [Header("Encounter (optional — falls back to a built-in duel if empty)")]
+        [SerializeField] private EncounterData _encounter;
 
         private BattleManager _battle;
 
@@ -20,35 +18,57 @@ namespace Combat
             EventBus.Subscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Subscribe<SkillSelectedEvent>(OnSkillSelected);
 
-            Unit player = BuildPlayer(out SkillData[] skills);
-            Unit enemy  = BuildEnemy();
+            List<Unit> allies, enemies;
+            if (_encounter != null && HasTeams(_encounter))
+            {
+                allies  = BuildTeam(_encounter.allies,  _encounter.allyLevel);
+                enemies = BuildTeam(_encounter.enemies, _encounter.enemyLevel);
+            }
+            else
+            {
+                allies  = DefaultAllies();
+                enemies = DefaultEnemies();
+            }
 
             _battle = gameObject.AddComponent<BattleManager>();
-            _battle.Init(player, enemy, skills);
+            _battle.Init(allies, enemies);
         }
 
-        // ── Combatant construction ──────────────────────────────────────────
+        // ── Team construction ───────────────────────────────────────────────
 
-        private Unit BuildPlayer(out SkillData[] skills)
+        private static bool HasTeams(EncounterData e) =>
+            e.allies != null && e.allies.Length > 0 && e.enemies != null && e.enemies.Length > 0;
+
+        private static List<Unit> BuildTeam(HeroData[] heroes, int level)
         {
-            if (_playerHero != null)
+            var team = new List<Unit>();
+            if (heroes == null) return team;
+            foreach (var h in heroes)
             {
-                skills = _playerHero.Skills();
-                return Unit.FromHeroData(_playerHero, _playerLevel);
+                if (h == null) continue;
+                var unit = Unit.FromHeroData(h, level);
+                unit.SetSkills(h.Skills());
+                team.Add(unit);
             }
-            skills = DefaultPlayerSkills();
-            return new Unit("Hero", 500, 120, 110, 60, 0.15f, 1.6f);
+            return team;
         }
 
-        private Unit BuildEnemy()
+        // ── Built-in fallback (used only when no EncounterData is assigned) ──
+
+        private static List<Unit> DefaultAllies()
         {
-            if (_enemyHero != null)
-                return Unit.FromHeroData(_enemyHero, _enemyLevel);
-            return new Unit("Goblin", 420, 90, 90, 40, 0.05f, 1.5f);
+            var hero = new Unit("Hero", 500, 120, 110, 60, 0.15f, 1.6f);
+            hero.SetSkills(DefaultPlayerSkills());
+            return new List<Unit> { hero };
         }
 
-        // Built-in starter kit — only used when no HeroData asset is assigned, so
-        // the scene still plays before "RPG → Create Starter Content" has run.
+        private static List<Unit> DefaultEnemies()
+        {
+            var goblin = new Unit("Goblin", 420, 90, 90, 40, 0.05f, 1.5f);
+            goblin.SetSkills(new SkillData[0]);   // no skills → basic-attack AI
+            return new List<Unit> { goblin };
+        }
+
         private static SkillData[] DefaultPlayerSkills()
         {
             var slash = SkillData.Make("Slash", SkillType.Damage, 15, 30,

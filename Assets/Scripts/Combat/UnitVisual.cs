@@ -12,8 +12,11 @@ namespace Combat
         [SerializeField] private Vector2        _damageSpawnAnchor;
         [SerializeField] private RectTransform  _turnMeterFill;
         [SerializeField] private bool           _isPlayerUnit;
+        [SerializeField] private int            _slotIndex;
         [SerializeField] private Outline        _targetHighlight;
         [SerializeField] private Transform      _statusContainer;
+        [SerializeField] private RectTransform  _hpFill;
+        [SerializeField] private Text           _hpLabel;
 
         private Image         _image;
         private RectTransform _rt;
@@ -67,7 +70,13 @@ namespace Combat
 
         private void OnCombatInit(CombatInitEvent evt)
         {
-            _trackedUnit         = _isPlayerUnit ? evt.Player : evt.Enemy;
+            var team = _isPlayerUnit ? evt.Allies : evt.Enemies;
+            _trackedUnit = (team != null && _slotIndex >= 0 && _slotIndex < team.Count)
+                ? team[_slotIndex] : null;
+
+            // Panel with no matching unit (encounter smaller than the scene) — hide it.
+            if (_trackedUnit == null) { gameObject.SetActive(false); return; }
+
             _displayFill         = 0f;
             _wasReady            = false;
             _idleEnabled         = true;
@@ -75,6 +84,7 @@ namespace Combat
             _canvasOriginalPos   = _canvasRT != null ? _canvasRT.anchoredPosition : Vector2.zero;
             if (_turnMeterFill != null) _turnMeterFill.anchorMax = new Vector2(0f, 1f);
             if (_targetHighlight != null) _targetHighlight.enabled = false;
+            RefreshHP();
             RefreshStatusIcons();
         }
 
@@ -103,22 +113,27 @@ namespace Combat
             // Damage-over-time has no attacker — only the victim reacts, no lunge.
             if (evt.IsDoT)
             {
-                if (evt.Target == _trackedUnit) ShowDoT(evt.Damage);
+                if (evt.Target == _trackedUnit) { ShowDoT(evt.Damage); RefreshHP(); }
                 return;
             }
 
             if (evt.Target != _trackedUnit)
                 PlayAttackAnimation();
             else
+            {
                 ShowHit(evt.Damage, evt.IsCrit);
+                RefreshHP();
+            }
         }
 
-        // Self-heal is still an action; the caster should lunge.
+        // The healed unit shows a heal number and refreshes its bar (no lunge —
+        // the caster's lunge/glow is driven from OnSkillUsed).
         private void OnUnitHealedAnim(UnitHealedEvent evt)
         {
             if (evt.Target != _trackedUnit) return;
             PlayHealSFX();
-            PlayAttackAnimation();
+            ShowHeal(evt.Amount);
+            RefreshHP();
         }
 
         private void OnStatusEffectApplied(StatusEffectAppliedEvent evt)
@@ -132,9 +147,12 @@ namespace Combat
 
             if (evt.Skill.skillType == SkillType.Heal)
             {
-                // Heal VFX plays on the caster, not the target.
-                if (_trackedUnit == evt.Caster && _canvasRoot)
-                    StartCoroutine(HealGlowVFX());
+                // Heal VFX + lunge play on the caster, not the target.
+                if (_trackedUnit == evt.Caster)
+                {
+                    if (_canvasRoot) StartCoroutine(HealGlowVFX());
+                    PlayAttackAnimation();
+                }
                 return;
             }
 
@@ -209,6 +227,56 @@ namespace Combat
             _image.color = new Color(0.55f, 0.90f, 0.35f);
             yield return new WaitForSeconds(0.12f);
             _image.color = _originalColor;
+        }
+
+        // Rising green "+N" for heals.
+        private void ShowHeal(int amount)
+        {
+            if (amount <= 0 || _canvasRoot == null) return;
+            StartCoroutine(SpawnHealNumber(amount));
+        }
+
+        private IEnumerator SpawnHealNumber(int amount)
+        {
+            var go = new GameObject("HealNum");
+            go.transform.SetParent(_canvasRoot, false);
+
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = _damageSpawnAnchor;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(180f, 80f);
+
+            var txt = go.AddComponent<Text>();
+            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            txt.text = $"+{amount}"; txt.fontSize = 44; txt.fontStyle = FontStyle.Bold;
+            txt.alignment = TextAnchor.MiddleCenter; txt.color = new Color(0.35f, 1f, 0.45f);
+
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor    = new Color(0f, 0f, 0f, 0.6f);
+            shadow.effectDistance = new Vector2(2f, -2f);
+
+            float elapsed        = 0f;
+            const float Duration = 0.8f;
+            while (elapsed < Duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / Duration;
+                rt.anchoredPosition = new Vector2(0f, Mathf.Lerp(0f, 120f, t));
+                txt.color = new Color(0.35f, 1f, 0.45f, 1f - t);
+                yield return null;
+            }
+
+            Destroy(go);
+        }
+
+        // ── HP bar ─────────────────────────────────────────────────────────
+
+        private void RefreshHP()
+        {
+            if (_trackedUnit == null) return;
+            float ratio = _trackedUnit.MaxHP > 0 ? (float)_trackedUnit.HP / _trackedUnit.MaxHP : 0f;
+            if (_hpFill != null) _hpFill.anchorMax = new Vector2(Mathf.Clamp01(ratio), 1f);
+            if (_hpLabel != null) _hpLabel.text = $"{_trackedUnit.HP} / {_trackedUnit.MaxHP}";
         }
 
         // ── Idle breathing ────────────────────────────────────────────────

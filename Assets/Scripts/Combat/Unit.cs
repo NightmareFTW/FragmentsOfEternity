@@ -4,6 +4,8 @@ using Data;
 
 namespace Combat
 {
+    public enum Team { Player, Enemy }
+
     public class ActiveStatusEffect
     {
         public StatusEffectType Type;
@@ -23,8 +25,14 @@ namespace Combat
         public float  CritDamage { get; }
         public float  TurnMeter  { get; private set; }
 
+        public Team Team { get; set; }
+        public int  Slot { get; set; }   // index within the unit's own team, for UI mapping
+
         public bool IsAlive => HP > 0;
         public bool IsReady => TurnMeter >= 100f;
+
+        public SkillData[] Skills { get; private set; } = System.Array.Empty<SkillData>();
+        private int[] _cooldowns = System.Array.Empty<int>();
 
         private readonly List<ActiveStatusEffect> _activeEffects = new();
 
@@ -106,6 +114,41 @@ namespace Combat
             int actual = Mathf.Min(amount, MaxHP - HP);
             HP = Mathf.Min(MaxHP, HP + amount);
             return actual;
+        }
+
+        // ── Skills & cooldowns ──────────────────────────────────────────────
+
+        public void SetSkills(SkillData[] skills)
+        {
+            Skills     = skills ?? System.Array.Empty<SkillData>();
+            _cooldowns = new int[Skills.Length];
+        }
+
+        public int[] CooldownSnapshot() => (int[])_cooldowns.Clone();
+
+        public int CooldownOf(int slot) =>
+            (slot >= 0 && slot < _cooldowns.Length) ? _cooldowns[slot] : 0;
+
+        public bool IsSkillReady(int slot) =>
+            slot >= 0 && slot < Skills.Length && _cooldowns[slot] == 0;
+
+        public bool HasReadySkill()
+        {
+            for (int i = 0; i < Skills.Length; i++)
+                if (_cooldowns[i] == 0) return true;
+            return false;
+        }
+
+        public void PutOnCooldown(int slot)
+        {
+            if (slot >= 0 && slot < Skills.Length && Skills[slot] != null)
+                _cooldowns[slot] = Skills[slot].cooldownTurns;
+        }
+
+        public void TickCooldowns()
+        {
+            for (int i = 0; i < _cooldowns.Length; i++)
+                if (_cooldowns[i] > 0) _cooldowns[i]--;
         }
 
         // ── Status effects ──────────────────────────────────────────────────

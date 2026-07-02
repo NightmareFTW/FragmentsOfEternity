@@ -12,14 +12,6 @@ namespace UI
         [Header("Turn Display")]
         [SerializeField] private Text _turnLabel;
 
-        [Header("HP Display")]
-        [SerializeField] private Text _playerHPLabel;
-        [SerializeField] private Text _enemyHPLabel;
-
-        [Header("Unit Visuals")]
-        [SerializeField] private UnitVisual _playerVisual;
-        [SerializeField] private UnitVisual _enemyVisual;
-
         [Header("Skill Buttons")]
         [SerializeField] private Button _skill1Button;
         [SerializeField] private Button _skill2Button;
@@ -28,10 +20,6 @@ namespace UI
         [Header("Tooltip")]
         [SerializeField] private TooltipUI _tooltip;
 
-        private Unit        _player;
-        private Unit        _enemy;
-        private Color       _playerHPColor;
-        private Color       _enemyHPColor;
         private SkillData[] _playerSkills;
         private int[]       _cachedCooldowns;
         private bool        _isPlayerTurn;
@@ -45,8 +33,6 @@ namespace UI
         {
             EventBus.Subscribe<CombatInitEvent>(OnCombatInit);
             EventBus.Subscribe<TurnStartedEvent>(OnTurnStarted);
-            EventBus.Subscribe<UnitDamagedEvent>(OnUnitDamaged);
-            EventBus.Subscribe<UnitHealedEvent>(OnUnitHealed);
             EventBus.Subscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Subscribe<SkillCooldownsChangedEvent>(OnSkillCooldownsChanged);
             _skill1Button?.onClick.AddListener(() => OnSkillPressed(0));
@@ -61,8 +47,6 @@ namespace UI
         {
             EventBus.Unsubscribe<CombatInitEvent>(OnCombatInit);
             EventBus.Unsubscribe<TurnStartedEvent>(OnTurnStarted);
-            EventBus.Unsubscribe<UnitDamagedEvent>(OnUnitDamaged);
-            EventBus.Unsubscribe<UnitHealedEvent>(OnUnitHealed);
             EventBus.Unsubscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Unsubscribe<SkillCooldownsChangedEvent>(OnSkillCooldownsChanged);
         }
@@ -71,21 +55,16 @@ namespace UI
 
         private void OnCombatInit(CombatInitEvent evt)
         {
-            _player       = evt.Player;
-            _enemy        = evt.Enemy;
-            _playerSkills = evt.PlayerSkills;
             _isPlayerTurn = false;
-            _playerHPColor = _playerHPLabel ? _playerHPLabel.color : Color.white;
-            _enemyHPColor  = _enemyHPLabel  ? _enemyHPLabel.color  : Color.white;
-            RefreshHP(_playerHPLabel, _player);
-            RefreshHP(_enemyHPLabel,  _enemy);
-            SetAllButtonsInteractable(false);   // enabled only when Hero's turn starts
+            SetAllButtonsInteractable(false);   // enabled only on an ally's turn
         }
 
+        // Buttons follow whichever ally is currently acting.
         private void OnSkillCooldownsChanged(SkillCooldownsChangedEvent evt)
         {
             if (_combatOver) return;
-            if (evt.Skills != null) _playerSkills = evt.Skills;
+            if (evt.Owner != null && evt.Owner.Team != Team.Player) return;   // ignore enemies
+            _playerSkills    = evt.Skills;
             _cachedCooldowns = evt.Cooldowns;
             RefreshButtonStates();
         }
@@ -94,30 +73,12 @@ namespace UI
         {
             _inputLocked  = false;   // always reset at turn boundary
             if (_turnLabel) _turnLabel.text = $"{evt.Actor.Name}'s Turn";
-            _isPlayerTurn = (_player != null && evt.Actor == _player);
+            _isPlayerTurn = evt.Actor.Team == Team.Player;
 
             if (!_isPlayerTurn)
                 SetAllButtonsInteractable(false);
             else
                 RefreshButtonStates();  // _cachedCooldowns already has ticked values
-        }
-
-        private void OnUnitDamaged(UnitDamagedEvent evt)
-        {
-            if (evt.Target == _player)
-            {
-                if (_playerHPLabel) StartCoroutine(DamageFlash(_playerHPLabel, _player, _playerHPColor));
-            }
-            else if (evt.Target == _enemy)
-            {
-                if (_enemyHPLabel) StartCoroutine(DamageFlash(_enemyHPLabel, _enemy, _enemyHPColor));
-            }
-        }
-
-        private void OnUnitHealed(UnitHealedEvent evt)
-        {
-            if (evt.Target == _player && _playerHPLabel)
-                StartCoroutine(HealFlash(_playerHPLabel, _player, _playerHPColor));
         }
 
         private void OnCombatEnd(CombatEndEvent evt)
@@ -132,28 +93,34 @@ namespace UI
 
         private void RefreshButtonStates()
         {
-            if (_cachedCooldowns == null) return;
-            var cds = _cachedCooldowns;
-            UpdateButtonState(_skill1Button, 0, cds.Length > 0 ? cds[0] : 0);
-            UpdateButtonState(_skill2Button, 1, cds.Length > 1 ? cds[1] : 0);
-            UpdateButtonState(_skill3Button, 2, cds.Length > 2 ? cds[2] : 0);
+            UpdateButtonState(_skill1Button, 0);
+            UpdateButtonState(_skill2Button, 1);
+            UpdateButtonState(_skill3Button, 2);
         }
 
-        private void UpdateButtonState(Button btn, int slot, int cd)
+        private void UpdateButtonState(Button btn, int slot)
         {
-            if (btn == null || _playerSkills == null || slot >= _playerSkills.Length) return;
+            if (btn == null) return;
+
+            // No skill in this slot for the active ally — blank and disable.
+            if (_playerSkills == null || slot >= _playerSkills.Length || _playerSkills[slot] == null)
+            {
+                btn.interactable = false;
+                SetButtonLabel(btn, "–");
+                _prevCooldowns[slot] = 0;
+                return;
+            }
+
+            int cd = (_cachedCooldowns != null && slot < _cachedCooldowns.Length) ? _cachedCooldowns[slot] : 0;
             bool canUse = cd == 0 && _isPlayerTurn && !_combatOver && !_inputLocked;
 
-            // Punch animation when skill first goes on cooldown
+            // Punch animation when a skill first goes on cooldown.
             if (cd > 0 && _prevCooldowns[slot] == 0 && !_shaking[slot])
                 StartCoroutine(PunchButton(btn, slot));
             _prevCooldowns[slot] = cd;
 
             btn.interactable = canUse;
-            var lbl = cd > 0
-                ? $"{_playerSkills[slot].skillName} ({cd}T)"
-                : _playerSkills[slot].skillName;
-            SetButtonLabel(btn, lbl);
+            SetButtonLabel(btn, cd > 0 ? $"{_playerSkills[slot].skillName} ({cd}T)" : _playerSkills[slot].skillName);
         }
 
         private void SetAllButtonsInteractable(bool value)
@@ -173,9 +140,8 @@ namespace UI
             var enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
             enter.callback.AddListener(_ =>
             {
-                if (_tooltip == null || _playerSkills == null || slot >= _playerSkills.Length) return;
-                int cd = (_cachedCooldowns != null && slot < _cachedCooldowns.Length)
-                    ? _cachedCooldowns[slot] : 0;
+                if (_tooltip == null || _playerSkills == null || slot >= _playerSkills.Length || _playerSkills[slot] == null) return;
+                int cd = (_cachedCooldowns != null && slot < _cachedCooldowns.Length) ? _cachedCooldowns[slot] : 0;
                 _tooltip.Show(_playerSkills[slot], btn.GetComponent<RectTransform>(), cd);
             });
             trigger.triggers.Add(enter);
@@ -206,35 +172,7 @@ namespace UI
             _shaking[slot] = false;
         }
 
-        private System.Collections.IEnumerator DamageFlash(Text label, Unit unit, Color original)
-        {
-            label.color = Color.white;
-            yield return null;
-            label.color = new Color(1f, 0.25f, 0.25f);
-            yield return new WaitForSeconds(0.2f);
-            label.text  = $"{unit.Name}  {unit.HP} / {unit.MaxHP}";
-            yield return new WaitForSeconds(0.1f);
-            label.color = original;
-        }
-
-        private System.Collections.IEnumerator HealFlash(Text label, Unit unit, Color original)
-        {
-            label.color = Color.white;
-            yield return null;
-            label.color = new Color(0.3f, 1f, 0.4f);
-            yield return new WaitForSeconds(0.2f);
-            label.text  = $"{unit.Name}  {unit.HP} / {unit.MaxHP}";
-            yield return new WaitForSeconds(0.1f);
-            label.color = original;
-        }
-
-        // ── Static helpers ─────────────────────────────────────────────────
-
-        private static void RefreshHP(Text label, Unit unit)
-        {
-            if (label && unit != null)
-                label.text = $"{unit.Name}  {unit.HP} / {unit.MaxHP}";
-        }
+        // ── Helpers ────────────────────────────────────────────────────────
 
         private static void SetButtonLabel(Button btn, string label)
         {
@@ -248,12 +186,12 @@ namespace UI
             // HUD-layer guard — BattleManager is authoritative, but this prevents
             // queuing extra SkillSelectedEvents during the EndTurnDelayed window.
             if (_inputLocked || !_isPlayerTurn || _combatOver)
-            {
                 return;
-            }
 
-            int cd = (_cachedCooldowns != null && slot < _cachedCooldowns.Length)
-                ? _cachedCooldowns[slot] : 0;
+            if (_playerSkills == null || slot >= _playerSkills.Length || _playerSkills[slot] == null)
+                return;
+
+            int cd = (_cachedCooldowns != null && slot < _cachedCooldowns.Length) ? _cachedCooldowns[slot] : 0;
             if (cd > 0)
             {
                 Debug.Log("[Input] Skill ignored: cooldown");

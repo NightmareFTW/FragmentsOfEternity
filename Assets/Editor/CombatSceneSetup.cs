@@ -19,28 +19,30 @@ namespace RPG.EditorTools
             foreach (var go in scene.GetRootGameObjects())
                 Object.DestroyImmediate(go);
 
+            // Load the starter encounter (created via RPG → Create Starter Content).
+            // When absent, panels + controller fall back to a built-in 1v1.
+            var encounter = AssetDatabase.LoadAssetAtPath<Data.EncounterData>(
+                "Assets/ScriptableObjects/Encounters/IntroSkirmish.asset");
+
             BuildCamera();
             BuildEventSystem();
-            BuildCombatController();
+            BuildCombatController(encounter);
 
             var canvas = BuildCanvas();
 
             // Background is the first canvas child — Unity renders first sibling at the back.
             BuildBackground(canvas.transform);
 
-            // Unit panels must be added first so they render behind the HUD overlay.
-            BuildUnitPanels(canvas.transform,
-                out var playerVisual, out var enemyVisual);
+            // Unit panels must be added before the HUD so they render behind it.
+            BuildUnitPanels(canvas.transform, encounter);
 
             BuildTitle(canvas.transform);
 
             var hud = BuildHUD(canvas.transform,
                 out var turnLabel,
-                out var playerHP, out var enemyHP,
                 out var s1, out var s2, out var s3);
 
-            WireHUD(hud, turnLabel, playerHP, enemyHP,
-                    s1, s2, s3, playerVisual, enemyVisual);
+            WireHUD(hud, turnLabel, s1, s2, s3);
 
             // Tooltip must be the last canvas child so it renders on top of everything.
             var tooltip = BuildTooltip(canvas.transform);
@@ -81,24 +83,17 @@ namespace RPG.EditorTools
             go.AddComponent<StandaloneInputModule>();
         }
 
-        static void BuildCombatController()
+        static void BuildCombatController(Data.EncounterData encounter)
         {
             var go         = new GameObject("CombatController");
             var controller = go.AddComponent<Combat.CombatController>();
 
-            // Wire starter HeroData assets if they exist (created via
-            // RPG → Create Starter Content). If absent, CombatController falls
-            // back to its built-in starter units, so the scene still plays.
-            var playerHero = AssetDatabase.LoadAssetAtPath<Data.HeroData>(
-                "Assets/ScriptableObjects/Heroes/Hero.asset");
-            var enemyHero = AssetDatabase.LoadAssetAtPath<Data.HeroData>(
-                "Assets/ScriptableObjects/Heroes/Goblin.asset");
-
-            if (playerHero != null || enemyHero != null)
+            // Wire the encounter if it exists (created via RPG → Create Starter
+            // Content). If absent, CombatController falls back to a built-in duel.
+            if (encounter != null)
             {
                 var so = new SerializedObject(controller);
-                if (playerHero != null) so.FindProperty("_playerHero").objectReferenceValue = playerHero;
-                if (enemyHero  != null) so.FindProperty("_enemyHero").objectReferenceValue  = enemyHero;
+                so.FindProperty("_encounter").objectReferenceValue = encounter;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
         }
@@ -258,37 +253,59 @@ namespace RPG.EditorTools
 
         // ── Unit panels ────────────────────────────────────────────────────
 
-        static void BuildUnitPanels(Transform canvasTransform,
-            out Combat.UnitVisual playerVisual, out Combat.UnitVisual enemyVisual)
+        static void BuildUnitPanels(Transform canvasTransform, Data.EncounterData encounter)
         {
-            playerVisual = MakeUnitPanel(
-                canvasTransform, "PlayerPanel",
-                bgColor:     new Color(0.04f, 0.07f, 0.18f, 0.94f),  // very dark navy
-                accentColor: new Color(0.35f, 0.65f, 1.00f, 0.80f),  // blue stripe
-                label:       "HERO",
-                anchorMin:   new Vector2(0.04f, 0.17f),
-                anchorMax:   new Vector2(0.44f, 0.54f),
-                spawnAnchor: new Vector2(0.24f, 0.50f),               // upper panel / head level
-                isPlayer:    true,
-                barColor:    new Color(0.25f, 0.85f, 0.40f));         // green ATB bar
+            string[] allyLabels  = LabelsFrom(encounter != null ? encounter.allies  : null, "HERO");
+            string[] enemyLabels = LabelsFrom(encounter != null ? encounter.enemies : null, "GOBLIN");
 
-            enemyVisual = MakeUnitPanel(
-                canvasTransform, "EnemyPanel",
-                bgColor:     new Color(0.16f, 0.04f, 0.04f, 0.94f),  // very dark burgundy
-                accentColor: new Color(1.00f, 0.42f, 0.12f, 0.80f),  // orange stripe
-                label:       "GOBLIN",
-                anchorMin:   new Vector2(0.56f, 0.17f),
-                anchorMax:   new Vector2(0.96f, 0.54f),
-                spawnAnchor: new Vector2(0.76f, 0.50f),
-                isPlayer:    false,
+            // Enemy row (upper), then player row (lower).
+            BuildRow(canvasTransform, "Enemy", enemyLabels, 0.58f, 0.78f, isPlayer: false,
+                bgColor:     new Color(0.16f, 0.04f, 0.04f, 0.94f),   // dark burgundy
+                accentColor: new Color(1.00f, 0.42f, 0.12f, 0.80f),   // orange stripe
                 barColor:    new Color(1.00f, 0.55f, 0.10f));         // orange ATB bar
+
+            BuildRow(canvasTransform, "Player", allyLabels, 0.30f, 0.50f, isPlayer: true,
+                bgColor:     new Color(0.04f, 0.07f, 0.18f, 0.94f),   // dark navy
+                accentColor: new Color(0.35f, 0.65f, 1.00f, 0.80f),   // blue stripe
+                barColor:    new Color(0.25f, 0.85f, 0.40f));         // green ATB bar
+        }
+
+        // Lays out a horizontal row of unit panels across the canvas width.
+        static void BuildRow(Transform canvasTransform, string prefix, string[] labels,
+            float yMin, float yMax, bool isPlayer, Color bgColor, Color accentColor, Color barColor)
+        {
+            int count = Mathf.Max(1, labels.Length);
+            const float xStart = 0.02f, xEnd = 0.98f, gap = 0.015f;
+            float pw = (xEnd - xStart - gap * (count - 1)) / count;
+
+            for (int i = 0; i < count; i++)
+            {
+                float axMin = xStart + i * (pw + gap);
+                float axMax = axMin + pw;
+                var spawn = new Vector2((axMin + axMax) * 0.5f, Mathf.Lerp(yMin, yMax, 0.72f));
+
+                MakeUnitPanel(canvasTransform, $"{prefix}Panel{i}",
+                    bgColor, accentColor, labels[i],
+                    new Vector2(axMin, yMin), new Vector2(axMax, yMax),
+                    spawn, isPlayer, slotIndex: i, barColor: barColor);
+            }
+        }
+
+        static string[] LabelsFrom(Data.HeroData[] team, string fallback)
+        {
+            if (team == null || team.Length == 0) return new[] { fallback };
+            var labels = new string[team.Length];
+            for (int i = 0; i < team.Length; i++)
+                labels[i] = (team[i] != null && !string.IsNullOrEmpty(team[i].heroName))
+                    ? team[i].heroName.ToUpper() : fallback;
+            return labels;
         }
 
         static Combat.UnitVisual MakeUnitPanel(
             Transform canvasTransform, string name,
             Color bgColor, Color accentColor, string label,
             Vector2 anchorMin, Vector2 anchorMax, Vector2 spawnAnchor,
-            bool isPlayer, Color barColor)
+            bool isPlayer, int slotIndex, Color barColor)
         {
             // ── Root panel (dark background) ──────────────────────────────
             var go = new GameObject(name);
@@ -304,21 +321,22 @@ namespace RPG.EditorTools
 
             // ── Left accent stripe ────────────────────────────────────────
             MakeRect(go.transform, "AccentStripe",
-                new Vector2(0f, 0f), new Vector2(0.025f, 1f),
+                new Vector2(0f, 0f), new Vector2(0.03f, 1f),
                 accentColor);
 
-            // ── ATB turn meter at top ─────────────────────────────────────
-            var fillRT = MakeTurnMeterBar(go.transform, barColor);
+            // ── ATB turn meter (top) + HP bar (just below) ────────────────
+            var fillRT           = MakeTurnMeterBar(go.transform, barColor);
+            var (hpFill, hpText) = MakeHPBar(go.transform);
 
-            // ── Character silhouette area (y: 0.22–0.87 of panel) ─────────
+            // ── Character silhouette area (y: 0.22–0.79 of panel) ─────────
             var charArea = MakeContainer(go.transform, "CharacterArea",
-                new Vector2(0.045f, 0.22f), new Vector2(1.00f, 0.87f));
+                new Vector2(0.045f, 0.22f), new Vector2(1.00f, 0.79f));
             BuildCharacterSilhouette(charArea, isPlayer);
 
-            // ── Unit name label (y: 0.12–0.22) ───────────────────────────
+            // ── Unit name label (y: 0.12–0.20) ───────────────────────────
             var (_, lbl) = MakeText(go.transform, "UnitLabel", label,
-                new Vector2(0.045f, 0.12f), new Vector2(0.96f, 0.22f),
-                fontSize: 24, style: FontStyle.Bold);
+                new Vector2(0.045f, 0.12f), new Vector2(0.96f, 0.20f),
+                fontSize: 20, style: FontStyle.Bold);
             lbl.color = new Color(0.82f, 0.90f, 1.00f);
 
             // ── Status icons strip at bottom (y: 0.01–0.10) ──────────────
@@ -335,11 +353,42 @@ namespace RPG.EditorTools
             so.FindProperty("_damageSpawnAnchor").vector2Value         = spawnAnchor;
             so.FindProperty("_turnMeterFill").objectReferenceValue     = fillRT;
             so.FindProperty("_isPlayerUnit").boolValue                 = isPlayer;
+            so.FindProperty("_slotIndex").intValue                     = slotIndex;
             so.FindProperty("_targetHighlight").objectReferenceValue   = highlight;
             so.FindProperty("_statusContainer").objectReferenceValue   = statusContainer;
+            so.FindProperty("_hpFill").objectReferenceValue            = hpFill;
+            so.FindProperty("_hpLabel").objectReferenceValue           = hpText;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             return visual;
+        }
+
+        // HP bar sits just under the turn meter; UnitVisual drives fill via anchorMax.x.
+        static (RectTransform, Text) MakeHPBar(Transform parent)
+        {
+            var bgGO = new GameObject("HPBarBG");
+            bgGO.transform.SetParent(parent, false);
+            var bgRT = bgGO.AddComponent<RectTransform>();
+            bgRT.anchorMin = new Vector2(0.045f, 0.805f);
+            bgRT.anchorMax = new Vector2(0.960f, 0.870f);
+            bgRT.offsetMin = bgRT.offsetMax = Vector2.zero;
+            var bgImg = bgGO.AddComponent<Image>();
+            bgImg.color = new Color(0.06f, 0.02f, 0.02f, 0.92f);
+
+            var fillGO = new GameObject("HPBarFill");
+            fillGO.transform.SetParent(bgGO.transform, false);
+            var fillRT = fillGO.AddComponent<RectTransform>();
+            fillRT.anchorMin = new Vector2(0f, 0f);
+            fillRT.anchorMax = new Vector2(1f, 1f);
+            fillRT.offsetMin = fillRT.offsetMax = Vector2.zero;
+            var fillImg = fillGO.AddComponent<Image>();
+            fillImg.color = new Color(0.30f, 0.85f, 0.35f);
+
+            var (_, txt) = MakeText(bgGO.transform, "HPText", "",
+                Vector2.zero, Vector2.one, fontSize: 16, style: FontStyle.Bold);
+            txt.color = Color.white;
+
+            return (fillRT, txt);
         }
 
         // ── Character silhouettes ──────────────────────────────────────────
@@ -593,7 +642,6 @@ namespace RPG.EditorTools
         static global::UI.CombatHUD BuildHUD(
             Transform parent,
             out Text   turnLabel,
-            out Text   playerHP, out Text enemyHP,
             out Button s1, out Button s2, out Button s3)
         {
             var hudGO = new GameObject("CombatHUD");
@@ -601,26 +649,10 @@ namespace RPG.EditorTools
             FullStretch(hudGO.AddComponent<RectTransform>());
             var hud = hudGO.AddComponent<global::UI.CombatHUD>();
 
-            var (_, eh) = MakeText(
-                hudGO.transform, "EnemyHPLabel", "Enemy HP",
-                new Vector2(0.02f, 0.79f), new Vector2(0.98f, 0.87f),
-                fontSize: 30, style: FontStyle.Normal);
-            eh.alignment = TextAnchor.MiddleRight;
-            eh.color     = new Color(1f, 0.45f, 0.45f);
-            enemyHP      = eh;
-
-            var (_, ph) = MakeText(
-                hudGO.transform, "PlayerHPLabel", "Player HP",
-                new Vector2(0.02f, 0.67f), new Vector2(0.98f, 0.75f),
-                fontSize: 30, style: FontStyle.Normal);
-            ph.alignment = TextAnchor.MiddleLeft;
-            ph.color     = new Color(0.45f, 1f, 0.6f);
-            playerHP     = ph;
-
             var (_, tl) = MakeText(
                 hudGO.transform, "TurnLabel", "–",
-                new Vector2(0.3f, 0.56f), new Vector2(0.7f, 0.64f),
-                fontSize: 36, style: FontStyle.Normal);
+                new Vector2(0.25f, 0.51f), new Vector2(0.75f, 0.57f),
+                fontSize: 34, style: FontStyle.Normal);
             tl.color  = Color.white;
             turnLabel = tl;
 
@@ -636,16 +668,11 @@ namespace RPG.EditorTools
 
         static void WireHUD(
             global::UI.CombatHUD hud,
-            Text turnLabel, Text playerHP, Text enemyHP,
-            Button s1, Button s2, Button s3,
-            Combat.UnitVisual playerVisual, Combat.UnitVisual enemyVisual)
+            Text turnLabel,
+            Button s1, Button s2, Button s3)
         {
             var so = new SerializedObject(hud);
             so.FindProperty("_turnLabel").objectReferenceValue      = turnLabel;
-            so.FindProperty("_playerHPLabel").objectReferenceValue  = playerHP;
-            so.FindProperty("_enemyHPLabel").objectReferenceValue   = enemyHP;
-            so.FindProperty("_playerVisual").objectReferenceValue   = playerVisual;
-            so.FindProperty("_enemyVisual").objectReferenceValue    = enemyVisual;
             so.FindProperty("_skill1Button").objectReferenceValue   = s1;
             so.FindProperty("_skill2Button").objectReferenceValue   = s2;
             so.FindProperty("_skill3Button").objectReferenceValue   = s3;

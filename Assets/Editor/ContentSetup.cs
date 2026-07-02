@@ -5,23 +5,26 @@ using Data;
 
 namespace RPG.EditorTools
 {
-    // Generates the starter ScriptableObject content (heroes + skills) so the
-    // game runs from editable data assets instead of hardcoded values.
-    // Run this BEFORE "RPG → Setup Combat Scene" so the scene can wire the assets.
+    // Generates the starter ScriptableObject content (skills, heroes, and a 4v4
+    // encounter) so the game runs from editable data assets instead of hardcoded
+    // values. Run this BEFORE "RPG → Setup Combat Scene" so the scene can size
+    // itself to the encounter and wire the assets.
     public static class ContentSetup
     {
-        private const string SkillDir = "Assets/ScriptableObjects/Skills";
-        private const string HeroDir  = "Assets/ScriptableObjects/Heroes";
+        private const string SkillDir     = "Assets/ScriptableObjects/Skills";
+        private const string HeroDir      = "Assets/ScriptableObjects/Heroes";
+        private const string EncounterDir = "Assets/ScriptableObjects/Encounters";
 
         [MenuItem("RPG/Create Starter Content", priority = 0)]
         public static void CreateContent()
         {
             EnsureFolders();
 
+            // ── Skills ────────────────────────────────────────────────────
             var slash = MakeSkill("Slash", "slash",
                 SkillType.Damage, TargetType.SingleEnemy, 15, 30, canCrit: true, cooldown: 0,
                 "A quick sword strike that leaves a wound.",
-                onHit:  new[] { Effect(StatusEffectType.Bleed, 2, 12) });
+                onHit: new[] { Effect(StatusEffectType.Bleed, 2, 12) });
 
             var heavy = MakeSkill("Heavy Blow", "heavy_blow",
                 SkillType.Damage, TargetType.SingleEnemy, 25, 45, canCrit: true, cooldown: 2,
@@ -34,21 +37,73 @@ namespace RPG.EditorTools
                 "Restore health and steel your defences.",
                 onSelf: new[] { Effect(StatusEffectType.DefenseUp, 2, 20) });
 
-            MakeHero("Hero", "hero", Element.Light, HeroClass.Warrior, rarity: 5,
+            var fireball = MakeSkill("Fireball", "fireball",
+                SkillType.Damage, TargetType.SingleEnemy, 30, 55, canCrit: true, cooldown: 2,
+                "A burst of flame that scorches the target.",
+                onHit: new[] { Effect(StatusEffectType.Burn, 2, 18) });
+
+            var mend = MakeSkill("Mend", "mend",
+                SkillType.Heal, TargetType.SingleAlly, 70, 110, canCrit: false, cooldown: 2,
+                "Channel restorative light to the most wounded ally.");
+
+            var guard = MakeSkill("Guard", "guard",
+                SkillType.Buff, TargetType.Self, 0, 0, canCrit: false, cooldown: 3,
+                "Brace yourself, sharply raising defence.",
+                onSelf: new[] { Effect(StatusEffectType.DefenseUp, 2, 40) });
+
+            // ── Allies ────────────────────────────────────────────────────
+            var hero = MakeHero("Hero", "hero", Element.Light, HeroClass.Warrior, rarity: 5,
                 hp: 500, atk: 110, def: 60, spd: 120, critRate: 0.15f, critDmg: 1.6f,
                 hpGrowth: 55f, atkGrowth: 12f, defGrowth: 6f,
                 slash, heavy, recover);
 
-            MakeHero("Goblin", "goblin", Element.Earth, HeroClass.Warrior, rarity: 3,
+            var knight = MakeHero("Knight", "knight", Element.Ice, HeroClass.Knight, rarity: 4,
+                hp: 650, atk: 95, def: 85, spd: 95, critRate: 0.08f, critDmg: 1.5f,
+                hpGrowth: 70f, atkGrowth: 9f, defGrowth: 9f,
+                slash, guard, heavy);
+
+            var mage = MakeHero("Mage", "mage", Element.Fire, HeroClass.Mage, rarity: 5,
+                hp: 420, atk: 130, def: 45, spd: 105, critRate: 0.18f, critDmg: 1.7f,
+                hpGrowth: 45f, atkGrowth: 15f, defGrowth: 4f,
+                fireball, slash, recover);
+
+            var cleric = MakeHero("Cleric", "cleric", Element.Light, HeroClass.Manauser, rarity: 4,
+                hp: 480, atk: 85, def: 55, spd: 110, critRate: 0.10f, critDmg: 1.5f,
+                hpGrowth: 50f, atkGrowth: 8f, defGrowth: 6f,
+                mend, slash, recover);
+
+            // ── Enemies ───────────────────────────────────────────────────
+            var goblin = MakeHero("Goblin", "goblin", Element.Earth, HeroClass.Warrior, rarity: 3,
                 hp: 420, atk: 90, def: 40, spd: 90, critRate: 0.05f, critDmg: 1.5f,
                 hpGrowth: 40f, atkGrowth: 9f, defGrowth: 4f,
-                null, null, null);
+                slash, null, null);
+
+            var grunt = MakeHero("Goblin Grunt", "goblin_grunt", Element.Earth, HeroClass.Warrior, rarity: 3,
+                hp: 380, atk: 85, def: 38, spd: 95, critRate: 0.05f, critDmg: 1.5f,
+                hpGrowth: 36f, atkGrowth: 8f, defGrowth: 4f,
+                slash, null, null);
+
+            var orc = MakeHero("Orc", "orc", Element.Dark, HeroClass.Warrior, rarity: 4,
+                hp: 600, atk: 100, def: 70, spd: 75, critRate: 0.05f, critDmg: 1.5f,
+                hpGrowth: 65f, atkGrowth: 10f, defGrowth: 7f,
+                heavy, null, null);
+
+            var wolf = MakeHero("Wolf", "wolf", Element.Dark, HeroClass.Thief, rarity: 3,
+                hp: 350, atk: 95, def: 35, spd: 130, critRate: 0.10f, critDmg: 1.5f,
+                hpGrowth: 34f, atkGrowth: 9f, defGrowth: 3f,
+                slash, null, null);
+
+            // ── Encounter ─────────────────────────────────────────────────
+            MakeEncounter("Intro Skirmish", "intro_skirmish",
+                new[] { hero, knight, mage, cleric },
+                new[] { goblin, grunt, orc, wolf },
+                allyLevel: 1, enemyLevel: 1);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[RPG] Starter content created in Assets/ScriptableObjects/ " +
-                      "(Hero, Goblin, Slash, Heavy Blow, Recover). " +
-                      "Now run RPG → Setup Combat Scene to wire it into the scene.");
+            Debug.Log("[RPG] Starter content created: 6 skills, 8 heroes, and the " +
+                      "'Intro Skirmish' 4v4 encounter in Assets/ScriptableObjects/. " +
+                      "Now run RPG → Setup Combat Scene to build the battlefield.");
         }
 
         [MenuItem("RPG/Create Starter Content", validate = true)]
@@ -113,6 +168,22 @@ namespace RPG.EditorTools
             return hd;
         }
 
+        static void MakeEncounter(
+            string name, string id, HeroData[] allies, HeroData[] enemies,
+            int allyLevel, int enemyLevel)
+        {
+            string path = $"{EncounterDir}/{Sanitize(name)}.asset";
+            var ed = LoadOrCreate<EncounterData>(path);
+
+            ed.encounterName = name;
+            ed.allies        = allies;
+            ed.enemies       = enemies;
+            ed.allyLevel     = allyLevel;
+            ed.enemyLevel    = enemyLevel;
+
+            EditorUtility.SetDirty(ed);
+        }
+
         static StatusEffectEntry Effect(StatusEffectType type, int duration, int value) =>
             new StatusEffectEntry { type = type, duration = duration, value = value };
 
@@ -137,6 +208,8 @@ namespace RPG.EditorTools
                 AssetDatabase.CreateFolder("Assets/ScriptableObjects", "Skills");
             if (!AssetDatabase.IsValidFolder(HeroDir))
                 AssetDatabase.CreateFolder("Assets/ScriptableObjects", "Heroes");
+            if (!AssetDatabase.IsValidFolder(EncounterDir))
+                AssetDatabase.CreateFolder("Assets/ScriptableObjects", "Encounters");
         }
 
         static string Sanitize(string name) => name.Replace(" ", "");
