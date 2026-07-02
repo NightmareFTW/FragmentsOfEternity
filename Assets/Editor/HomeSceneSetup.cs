@@ -86,9 +86,40 @@ namespace RPG.EditorTools
             EditorSceneManager.MarkSceneDirty(scene);
             bool saved = EditorSceneManager.SaveScene(scene, ScenePath);
             EnsureBuildScenes();
+            PatchBootFirstScene("Home");
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);   // leave the user on Home
             Debug.Log(saved
-                ? "[RPG] Home scene built and saved; Boot/Home/Combat registered in Build Settings."
+                ? "[RPG] Home scene built; Boot→Home wired; Boot/Home/Combat in Build Settings."
                 : "[RPG] ERROR: Home scene save failed.");
+        }
+
+        // Point the Boot scene's Bootstrap at Home so a full boot lands on the hub.
+        static void PatchBootFirstScene(string sceneName)
+        {
+            const string bootPath = "Assets/Scenes/Boot.unity";
+            if (!File.Exists(bootPath)) return;
+
+            var boot    = EditorSceneManager.OpenScene(bootPath, OpenSceneMode.Single);
+            bool changed = false;
+            foreach (var go in boot.GetRootGameObjects())
+            {
+                var bs = go.GetComponentInChildren<global::Core.Bootstrap>(true);
+                if (bs == null) continue;
+                var so   = new SerializedObject(bs);
+                var prop = so.FindProperty("_firstScene");
+                if (prop != null && prop.stringValue != sceneName)
+                {
+                    prop.stringValue = sceneName;
+                    so.ApplyModifiedPropertiesWithoutUndo();
+                    changed = true;
+                }
+                break;
+            }
+            if (changed)
+            {
+                EditorSceneManager.MarkSceneDirty(boot);
+                EditorSceneManager.SaveScene(boot);
+            }
         }
 
         [MenuItem("RPG/Setup Home Scene", validate = true)]

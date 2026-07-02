@@ -48,6 +48,9 @@ namespace RPG.EditorTools
             var tooltip = BuildTooltip(canvas.transform);
             WireTooltip(hud, tooltip);
 
+            // End-of-battle result overlay renders above even the tooltip.
+            BuildResultPanel(canvas.transform);
+
             EditorSceneManager.MarkSceneDirty(scene);
             bool saved = EditorSceneManager.SaveScene(scene, ScenePath);
             Debug.Log(saved
@@ -777,6 +780,44 @@ namespace RPG.EditorTools
 
             go.SetActive(false);
             return tooltip;
+        }
+
+        // ── Result overlay ─────────────────────────────────────────────────
+
+        static void BuildResultPanel(Transform canvasTransform)
+        {
+            // Controller sits on an always-active object so it hears CombatEndEvent.
+            var ctrlGO = new GameObject("CombatResult");
+            ctrlGO.transform.SetParent(canvasTransform, false);
+            FullStretch(ctrlGO.AddComponent<RectTransform>());
+            var ui = ctrlGO.AddComponent<global::UI.CombatResultUI>();
+
+            // Hidden overlay panel (child), switched on at battle end.
+            var panel = new GameObject("Panel");
+            panel.transform.SetParent(ctrlGO.transform, false);
+            FullStretch(panel.AddComponent<RectTransform>());
+            var dim = panel.AddComponent<Image>();
+            dim.color = new Color(0f, 0f, 0f, 0.80f);   // blocks input to the finished board
+
+            var (_, outcome) = MakeText(panel.transform, "Outcome", "VICTORY",
+                new Vector2(0.08f, 0.55f), new Vector2(0.92f, 0.68f), 92, FontStyle.Bold);
+            outcome.color = new Color(1f, 0.85f, 0.3f);
+
+            var (_, reward) = MakeText(panel.transform, "Reward", "+0 Gems",
+                new Vector2(0.08f, 0.46f), new Vector2(0.92f, 0.54f), 46, FontStyle.Bold);
+            reward.color = new Color(0.6f, 0.9f, 1f);
+
+            var cont = MakeSkillButton(panel.transform, "ContinueButton", "CONTINUE",
+                new Vector2(0.25f, 0.30f), new Vector2(0.75f, 0.38f));
+
+            var so = new SerializedObject(ui);
+            so.FindProperty("_panel").objectReferenceValue          = panel;
+            so.FindProperty("_outcomeLabel").objectReferenceValue   = outcome;
+            so.FindProperty("_rewardLabel").objectReferenceValue    = reward;
+            so.FindProperty("_continueButton").objectReferenceValue = cont;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            panel.SetActive(false);
         }
 
         static void WireTooltip(global::UI.CombatHUD hud, global::UI.TooltipUI tooltip)

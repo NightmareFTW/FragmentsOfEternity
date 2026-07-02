@@ -5,7 +5,7 @@ namespace Core
     [DefaultExecutionOrder(-1000)]
     public class Bootstrap : MonoBehaviour
     {
-        [SerializeField] private string _firstScene = "Combat";
+        [SerializeField] private string _firstScene = "Home";
 
         private void Awake()
         {
