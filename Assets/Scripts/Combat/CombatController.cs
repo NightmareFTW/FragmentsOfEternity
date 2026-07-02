@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Core;
 using Data;
 
@@ -103,6 +105,16 @@ namespace Combat
         {
             Debug.Log($"[Combat] ── {(evt.Victory ? "VICTORY" : "DEFEAT")} ──");
             GameManager.Instance?.SetState(evt.Victory ? GameState.Results : GameState.MainMenu);
+            StartCoroutine(ReturnHome());
+        }
+
+        // After the result sinks in, head back to the Home hub (if it exists in
+        // the build — guarded so opening Combat.unity directly still works).
+        private IEnumerator ReturnHome()
+        {
+            yield return new WaitForSeconds(2.5f);
+            if (Application.CanStreamedLevelBeLoaded("Home"))
+                SceneManager.LoadScene("Home");
         }
     }
 

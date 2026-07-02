@@ -99,11 +99,15 @@ namespace RPG.EditorTools
                 new[] { goblin, grunt, orc, wolf },
                 allyLevel: 1, enemyLevel: 1);
 
+            // ── Gacha pool (the four summonable heroes) ───────────────────
+            MakeGachaPool(new[] { hero, knight, mage, cleric }, summonCost: 300);
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[RPG] Starter content created: 6 skills, 8 heroes, and the " +
-                      "'Intro Skirmish' 4v4 encounter in Assets/ScriptableObjects/. " +
-                      "Now run RPG → Setup Combat Scene to build the battlefield.");
+            Debug.Log("[RPG] Starter content created: 6 skills, 8 heroes, the " +
+                      "'Intro Skirmish' 4v4 encounter, and a GachaPool in " +
+                      "Assets/ScriptableObjects/. Now run RPG → Setup Combat Scene " +
+                      "and RPG → Setup Home Scene.");
         }
 
         [MenuItem("RPG/Create Starter Content", validate = true)]
@@ -166,6 +170,14 @@ namespace RPG.EditorTools
 
             EditorUtility.SetDirty(hd);
             return hd;
+        }
+
+        static void MakeGachaPool(HeroData[] heroes, int summonCost)
+        {
+            var gp = LoadOrCreate<GachaPool>("Assets/ScriptableObjects/GachaPool.asset");
+            gp.heroes     = heroes;
+            gp.summonCost = summonCost;
+            EditorUtility.SetDirty(gp);
         }
 
         static void MakeEncounter(
