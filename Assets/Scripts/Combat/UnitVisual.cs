@@ -1,12 +1,13 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using Core;
 using Data;
 
 namespace Combat
 {
-    public class UnitVisual : MonoBehaviour
+    public class UnitVisual : MonoBehaviour, IPointerClickHandler
     {
         [SerializeField] private Transform      _canvasRoot;
         [SerializeField] private Vector2        _damageSpawnAnchor;
@@ -35,6 +36,7 @@ namespace Combat
         private Coroutine     _shakeCoroutine;
         private SkillData     _pendingSkillVFX;
         private float         _lastShowHitTime = -1f;
+        private bool          _isDead;
 
         private void Awake()
         {
@@ -161,6 +163,14 @@ namespace Combat
                 _pendingSkillVFX = evt.Skill;
         }
 
+        // Tapping a unit panel proposes it as the current target; the
+        // BattleManager decides whether the pick is legal for this turn.
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (_trackedUnit == null || _isDead) return;
+            EventBus.Raise(new UnitClickedEvent { Unit = _trackedUnit });
+        }
+
         // ── Update ────────────────────────────────────────────────────────
 
         private void Update()
@@ -277,6 +287,22 @@ namespace Combat
             float ratio = _trackedUnit.MaxHP > 0 ? (float)_trackedUnit.HP / _trackedUnit.MaxHP : 0f;
             if (_hpFill != null) _hpFill.anchorMax = new Vector2(Mathf.Clamp01(ratio), 1f);
             if (_hpLabel != null) _hpLabel.text = $"{_trackedUnit.HP} / {_trackedUnit.MaxHP}";
+            if (!_trackedUnit.IsAlive) MarkDead();
+        }
+
+        // Dim the whole panel and take it out of the action once the unit falls.
+        private void MarkDead()
+        {
+            if (_isDead) return;
+            _isDead       = true;
+            _idleEnabled  = false;
+            transform.localScale = _originalScale;
+            if (_rt) _rt.anchoredPosition = _originalAnchoredPos;
+            if (_targetHighlight != null) _targetHighlight.enabled = false;
+
+            var cg = GetComponent<CanvasGroup>();
+            if (cg == null) cg = gameObject.AddComponent<CanvasGroup>();
+            cg.alpha = 0.35f;
         }
 
         // ── Idle breathing ────────────────────────────────────────────────
@@ -695,7 +721,8 @@ namespace Combat
                 rt.anchoredPosition = new Vector2(startX + i * (IconSize + Spacing), 14f);
 
                 var img = iconGO.AddComponent<Image>();
-                img.color = new Color(iconColor.r, iconColor.g, iconColor.b, 0f);
+                img.color         = new Color(iconColor.r, iconColor.g, iconColor.b, 0f);
+                img.raycastTarget = false;   // don't block target-selection taps
 
                 var lblGO = new GameObject("Label");
                 lblGO.transform.SetParent(iconGO.transform, false);
@@ -708,6 +735,7 @@ namespace Combat
                 txt.text = $"{GetIconLetter(effect.Type)}\n{effect.Duration}";
                 txt.fontSize = 16; txt.fontStyle = FontStyle.Bold;
                 txt.alignment = TextAnchor.MiddleCenter; txt.color = new Color(1f, 1f, 1f, 0f);
+                txt.raycastTarget = false;
 
                 var shadow = lblGO.AddComponent<Shadow>();
                 shadow.effectColor    = new Color(0f, 0f, 0f, 0.85f);

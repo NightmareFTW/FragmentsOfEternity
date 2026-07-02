@@ -27,8 +27,20 @@ namespace Combat
             _units.AddRange(_allies);
             _units.AddRange(_enemies);
 
+            EventBus.Subscribe<UnitClickedEvent>(OnUnitClicked);
             EventBus.Raise(new CombatInitEvent { Allies = _allies, Enemies = _enemies });
             StartCoroutine(TickLoop());
+        }
+
+        private void OnDestroy() => EventBus.Unsubscribe<UnitClickedEvent>(OnUnitClicked);
+
+        // Player tapped a unit — retarget if it's a legal choice this turn.
+        private void OnUnitClicked(UnitClickedEvent evt)
+        {
+            if (_combatOver || !_awaitingInput) return;
+            if (evt.Unit == null || !evt.Unit.IsAlive) return;
+            _currentTarget = evt.Unit;
+            EventBus.Raise(new TargetChangedEvent { Target = _currentTarget });
         }
 
         private void RegisterTeam(List<Unit> team, Team side)
@@ -66,9 +78,16 @@ namespace Combat
         {
             if (skill != null && skill.skillType == SkillType.Buff)
                 return caster;
-            if (skill != null && skill.skillType == SkillType.Heal)
-                return MostWounded(_allies) ?? caster;
 
+            if (skill != null && skill.skillType == SkillType.Heal)
+            {
+                // Honour a hand-picked ally; otherwise heal whoever is most hurt.
+                if (_currentTarget != null && _currentTarget.IsAlive && _currentTarget.Team == Team.Player)
+                    return _currentTarget;
+                return MostWounded(_allies) ?? caster;
+            }
+
+            // Damage — honour a hand-picked enemy; otherwise the first alive enemy.
             if (_currentTarget != null && _currentTarget.IsAlive && _currentTarget.Team == Team.Enemy)
                 return _currentTarget;
             return FirstAlive(_enemies);
@@ -303,6 +322,7 @@ namespace Combat
     public struct UnitHealedEvent            { public Unit Target; public int Amount; }
     public struct UnitStunnedEvent           { public Unit Actor; }
     public struct TargetChangedEvent         { public Unit Target; }
+    public struct UnitClickedEvent           { public Unit Unit; }
     public struct SkillCooldownsChangedEvent  { public Unit Owner; public SkillData[] Skills; public int[] Cooldowns; }
     public struct StatusEffectAppliedEvent    { public Unit Target; }
 }

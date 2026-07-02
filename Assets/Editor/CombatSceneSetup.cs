@@ -217,6 +217,22 @@ namespace RPG.EditorTools
             MakeBGRect(root.transform, "PlatformGlowEnemy",
                 new Vector2(0.56f, 0.140f), new Vector2(0.96f, 0.215f),
                 new Color(0.92f, 0.42f, 0.08f, 0.15f));
+
+            // ── Row grounding strips (2-row 4v4 layout) ──────────────────
+            // Faint dark shelves just under each unit row so the units feel
+            // planted rather than floating.
+            MakeBGRect(root.transform, "EnemyRowShelf",
+                new Vector2(0.00f, 0.560f), new Vector2(1.00f, 0.585f),
+                new Color(0.00f, 0.00f, 0.02f, 0.55f));
+            MakeBGRect(root.transform, "EnemyRowGlow",
+                new Vector2(0.02f, 0.575f), new Vector2(0.98f, 0.600f),
+                new Color(0.55f, 0.22f, 0.06f, 0.10f));
+            MakeBGRect(root.transform, "AllyRowShelf",
+                new Vector2(0.00f, 0.278f), new Vector2(1.00f, 0.303f),
+                new Color(0.00f, 0.00f, 0.02f, 0.55f));
+            MakeBGRect(root.transform, "AllyRowGlow",
+                new Vector2(0.02f, 0.293f), new Vector2(0.98f, 0.318f),
+                new Color(0.10f, 0.28f, 0.55f, 0.10f));
         }
 
         // Anchor-based solid rect — raycastTarget always false for background shapes.
@@ -373,7 +389,8 @@ namespace RPG.EditorTools
             bgRT.anchorMax = new Vector2(0.960f, 0.870f);
             bgRT.offsetMin = bgRT.offsetMax = Vector2.zero;
             var bgImg = bgGO.AddComponent<Image>();
-            bgImg.color = new Color(0.06f, 0.02f, 0.02f, 0.92f);
+            bgImg.color         = new Color(0.06f, 0.02f, 0.02f, 0.92f);
+            bgImg.raycastTarget = false;
 
             var fillGO = new GameObject("HPBarFill");
             fillGO.transform.SetParent(bgGO.transform, false);
@@ -382,7 +399,8 @@ namespace RPG.EditorTools
             fillRT.anchorMax = new Vector2(1f, 1f);
             fillRT.offsetMin = fillRT.offsetMax = Vector2.zero;
             var fillImg = fillGO.AddComponent<Image>();
-            fillImg.color = new Color(0.30f, 0.85f, 0.35f);
+            fillImg.color         = new Color(0.30f, 0.85f, 0.35f);
+            fillImg.raycastTarget = false;
 
             var (_, txt) = MakeText(bgGO.transform, "HPText", "",
                 Vector2.zero, Vector2.one, fontSize: 16, style: FontStyle.Bold);
@@ -523,7 +541,8 @@ namespace RPG.EditorTools
             bgRT.anchorMax = new Vector2(0.960f, 0.97f);
             bgRT.offsetMin = bgRT.offsetMax = Vector2.zero;
             var bgImg = bgGO.AddComponent<Image>();
-            bgImg.color = new Color(0.05f, 0.05f, 0.08f, 0.92f);
+            bgImg.color         = new Color(0.05f, 0.05f, 0.08f, 0.92f);
+            bgImg.raycastTarget = false;
 
             var fillGO = new GameObject("TurnMeterFill");
             fillGO.transform.SetParent(bgGO.transform, false);
@@ -533,7 +552,8 @@ namespace RPG.EditorTools
             fillRT.offsetMin = new Vector2(2f,  2f);
             fillRT.offsetMax = new Vector2(2f, -2f);
             var fillImg = fillGO.AddComponent<Image>();
-            fillImg.color = barColor;
+            fillImg.color         = barColor;
+            fillImg.raycastTarget = false;
 
             return fillRT;
         }
@@ -552,7 +572,8 @@ namespace RPG.EditorTools
             rt.offsetMin = rt.offsetMax = Vector2.zero;
 
             var bg = go.AddComponent<Image>();
-            bg.color = new Color(0f, 0f, 0f, 0.15f);
+            bg.color         = new Color(0f, 0f, 0f, 0.15f);
+            bg.raycastTarget = false;
 
             var shadow = go.AddComponent<Shadow>();
             shadow.effectColor    = new Color(0f, 0f, 0f, 0.25f);
@@ -598,7 +619,8 @@ namespace RPG.EditorTools
             rt.anchorMax = anchorMax;
             rt.offsetMin = rt.offsetMax = Vector2.zero;
             var img = go.AddComponent<Image>();
-            img.color = color;
+            img.color         = color;
+            img.raycastTarget = false;   // decoration — let the panel root catch clicks
             return rt;
         }
 
@@ -622,6 +644,7 @@ namespace RPG.EditorTools
             txt.fontStyle = style;
             txt.alignment = TextAnchor.MiddleCenter;
             txt.color     = Color.white;
+            txt.raycastTarget = false;   // labels never intercept unit/target clicks
 
             return (go, txt);
         }
