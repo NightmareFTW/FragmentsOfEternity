@@ -799,12 +799,15 @@ namespace Combat
             const float Dur = 0.15f;
             while (elapsed < Dur)
             {
+                // A refresh may destroy these icons mid-fade — bail if they're gone.
+                if (iconImg == null || labelTxt == null) yield break;
                 elapsed += Time.deltaTime;
                 float a = Mathf.Clamp01(elapsed / Dur);
                 iconImg.color  = new Color(targetColor.r, targetColor.g, targetColor.b, a);
                 labelTxt.color = new Color(1f, 1f, 1f, a);
                 yield return null;
             }
+            if (iconImg == null || labelTxt == null) yield break;
             iconImg.color  = targetColor;
             labelTxt.color = Color.white;
         }

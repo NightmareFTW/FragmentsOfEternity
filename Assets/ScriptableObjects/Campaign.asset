@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b1ddc473b8d4f88a6722f31bb0c49ee, type: 3}
+  m_Name: Campaign
+  m_EditorClassIdentifier: 
+  stages:
+  - stageName: "Stage 1 \u2014 Skirmish"
+    encounter: {fileID: 11400000, guid: 587652d187bae8b4da2aeb117590093d, type: 2}
+    gemReward: 150
+  - stageName: "Stage 2 \u2014 Warband"
+    encounter: {fileID: 11400000, guid: 014db652eff44c54982dd55347d640cd, type: 2}
+    gemReward: 250
+  - stageName: "Stage 3 \u2014 Warlord"
+    encounter: {fileID: 11400000, guid: b339eb10f8903ae4fad8d30561203938, type: 2}
+    gemReward: 400

@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e335b86cb8a4cbe48967cb35611372bc, type: 3}
+  m_Name: Meteor
+  m_EditorClassIdentifier: 
+  skillName: Meteor
+  skillId: meteor
+  description: Call down fire on every enemy, leaving them burning.
+  icon: {fileID: 0}
+  skillType: 0
+  targetType: 1
+  minValue: 20
+  maxValue: 40
+  canCrit: 1
+  cooldownTurns: 3
+  onHitEffects:
+  - type: 5
+    duration: 2
+    value: 15
+  onSelfEffects: []

@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e335b86cb8a4cbe48967cb35611372bc, type: 3}
+  m_Name: Hex
+  m_EditorClassIdentifier: 
+  skillName: Hex
+  skillId: hex
+  description: A dark curse that silences its victim.
+  icon: {fileID: 0}
+  skillType: 0
+  targetType: 0
+  minValue: 8
+  maxValue: 16
+  canCrit: 0
+  cooldownTurns: 3
+  onHitEffects:
+  - type: 3
+    duration: 2
+    value: 0
+  onSelfEffects: []

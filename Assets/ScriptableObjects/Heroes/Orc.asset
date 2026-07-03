@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a24d4e74f8e1ddd44b2f5cfc30e02968, type: 3}
+  m_Name: Orc
+  m_EditorClassIdentifier: 
+  heroName: Orc
+  heroId: orc
+  portrait: {fileID: 0}
+  element: 4
+  heroClass: 0
+  rarity: 4
+  baseHP: 600
+  baseATK: 100
+  baseDEF: 70
+  baseSPD: 75
+  baseCritRate: 0.05
+  baseCritDamage: 1.5
+  baseResistance: 0.15
+  baseAccuracy: 0
+  hpGrowth: 65
+  atkGrowth: 10
+  defGrowth: 7
+  skill1: {fileID: 11400000, guid: 582f4c9487d6b874aaac6b9baef88104, type: 2}
+  skill2: {fileID: 11400000, guid: 4c10f1380016887499960e90a710bbda, type: 2}
+  skill3: {fileID: 11400000, guid: 727415273bac9c741930cf94aff1ea32, type: 2}

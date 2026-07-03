@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a24d4e74f8e1ddd44b2f5cfc30e02968, type: 3}
+  m_Name: Mage
+  m_EditorClassIdentifier: 
+  heroName: Mage
+  heroId: mage
+  portrait: {fileID: 0}
+  element: 0
+  heroClass: 1
+  rarity: 5
+  baseHP: 420
+  baseATK: 130
+  baseDEF: 45
+  baseSPD: 105
+  baseCritRate: 0.18
+  baseCritDamage: 1.7
+  baseResistance: 0.15
+  baseAccuracy: 0
+  hpGrowth: 45
+  atkGrowth: 15
+  defGrowth: 4
+  skill1: {fileID: 11400000, guid: 8bc766ca56727894bb417b0178a19b21, type: 2}
+  skill2: {fileID: 11400000, guid: 165d6465e675ad8449d1de0afdc3cc91, type: 2}
+  skill3: {fileID: 11400000, guid: 7cbc56171dd7be94caaf0f715da193c0, type: 2}
