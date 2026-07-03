@@ -19,5 +19,15 @@ namespace Core
 
         // Number of campaign stages cleared; stage i is unlocked when this >= i.
         public int campaignProgress;
+
+        // Per-hero levels (absent id → level 1).
+        public List<HeroLevel> heroLevels = new List<HeroLevel>();
+    }
+
+    [Serializable]
+    public class HeroLevel
+    {
+        public string id;
+        public int    level = 1;
     }
 }

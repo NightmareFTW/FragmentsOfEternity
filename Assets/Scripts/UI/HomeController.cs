@@ -140,7 +140,7 @@ namespace UI
             int captured = index;
             btn.onClick.AddListener(() => LoadStage(captured));
 
-            var txt = MakeCellText(go.transform);
+            var txt = MakeCellText(go.transform, Vector2.zero, Vector2.one);
             txt.alignment = TextAnchor.MiddleCenter;
             string line2 = locked ? "Locked" : (cleared ? $"✓ +{stage.gemReward}" : $"+{stage.gemReward}");
             txt.text  = $"Stage {index + 1}\n{line2}";
@@ -232,10 +232,48 @@ namespace UI
                 outline.effectDistance = new Vector2(3f, 3f);
             }
 
-            var txt = MakeCellText(go.transform);
+            int level = ProgressionService.GetLevel(id);
+
+            // Main label (tap toggles team) on the left; a level-up button on the right.
+            var txt = MakeCellText(go.transform, new Vector2(0f, 0f), new Vector2(0.72f, 1f));
             string check = inTeam ? "[✓] " : "";
-            txt.text  = $"{check}{name}  {Stars(rarity)}   x{count}";
+            txt.text  = $"{check}{name}  {Stars(rarity)}   Lv {level}   x{count}";
             txt.color = inTeam ? Color.white : new Color(0.85f, 0.9f, 1f);
+
+            MakeLevelButton(go.transform, id, level, new Vector2(0.73f, 0.12f), new Vector2(0.99f, 0.88f));
+        }
+
+        private void MakeLevelButton(Transform parent, string id, int level, Vector2 aMin, Vector2 aMax)
+        {
+            bool max    = level >= ProgressionService.MaxLevel;
+            int  cost   = ProgressionService.CostToLevel(level);
+            bool afford = SaveSystem.Profile.gems >= cost;
+
+            var go = new GameObject("LevelUp");
+            go.transform.SetParent(parent, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = aMin; rt.anchorMax = aMax; rt.offsetMin = rt.offsetMax = Vector2.zero;
+
+            var img = go.AddComponent<Image>();
+            img.color = (!max && afford) ? new Color(0.24f, 0.46f, 0.30f, 0.95f)
+                                         : new Color(0.20f, 0.20f, 0.22f, 0.90f);
+
+            var btn = go.AddComponent<Button>();
+            btn.interactable = !max && afford;
+            btn.onClick.AddListener(() => OnLevelUp(id));
+
+            var txt = MakeCellText(go.transform, Vector2.zero, Vector2.one);
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.fontSize  = 22;
+            txt.text  = max ? "MAX" : $"Lv+\n{cost}g";
+            txt.color = (!max && afford) ? Color.white : new Color(0.6f, 0.6f, 0.65f);
+        }
+
+        private void OnLevelUp(string id)
+        {
+            if (ProgressionService.LevelUp(id) < 0)
+                SetError("Can't level up — max level or not enough gems.");
+            RebuildAll();
         }
 
         private void MakeGridLabel(string message)
@@ -245,20 +283,20 @@ namespace UI
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin = new Vector2(0f, 0.6f); rt.anchorMax = new Vector2(1f, 0.8f);
             rt.offsetMin = rt.offsetMax = Vector2.zero;
-            var txt = MakeCellText(go.transform);
+            var txt = MakeCellText(go.transform, Vector2.zero, Vector2.one);
             txt.text = message; txt.color = new Color(0.7f, 0.75f, 0.85f);
         }
 
-        private static Text MakeCellText(Transform parent)
+        private static Text MakeCellText(Transform parent, Vector2 aMin, Vector2 aMax)
         {
             var go = new GameObject("Label");
             go.transform.SetParent(parent, false);
             var rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(16f, 0f); rt.offsetMax = new Vector2(-16f, 0f);
+            rt.anchorMin = aMin; rt.anchorMax = aMax;
+            rt.offsetMin = new Vector2(12f, 0f); rt.offsetMax = new Vector2(-12f, 0f);
             var txt = go.AddComponent<Text>();
             txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            txt.fontSize = 30; txt.fontStyle = FontStyle.Bold;
+            txt.fontSize = 28; txt.fontStyle = FontStyle.Bold;
             txt.alignment = TextAnchor.MiddleLeft;
             txt.raycastTarget = false;
             return txt;

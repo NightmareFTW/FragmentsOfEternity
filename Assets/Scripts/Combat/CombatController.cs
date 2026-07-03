@@ -33,7 +33,7 @@ namespace Combat
 
             // Allies: the player's chosen roster if they have one, else the
             // encounter's fixed allies, else a built-in starter.
-            List<Unit> allies = BuildPlayerTeam(encounter);
+            List<Unit> allies = BuildPlayerTeam();
             if (allies == null || allies.Count == 0)
                 allies = (encounter != null && encounter.allies != null && encounter.allies.Length > 0)
                     ? BuildTeam(encounter.allies, encounter.allyLevel)
@@ -57,22 +57,21 @@ namespace Combat
             return _encounter;
         }
 
-        // The player's saved team, resolved from the gacha pool. Null when there
-        // is no pool wired or no team picked yet.
-        private List<Unit> BuildPlayerTeam(EncounterData encounter)
+        // The player's saved team, resolved from the gacha pool, each at its own
+        // trained level. Null when there is no pool wired or no team picked yet.
+        private List<Unit> BuildPlayerTeam()
         {
             if (_heroPool == null || _heroPool.heroes == null) return null;
 
             var ids = SaveSystem.Profile.teamHeroIds;
             if (ids == null || ids.Count == 0) return null;
 
-            int level = encounter != null ? encounter.allyLevel : 1;
             var units = new List<Unit>();
             foreach (var id in ids)
             {
                 var h = HeroById(id);
                 if (h == null) continue;
-                var u = Unit.FromHeroData(h, level);
+                var u = Unit.FromHeroData(h, ProgressionService.GetLevel(id));
                 u.SetSkills(h.Skills());
                 units.Add(u);
             }
