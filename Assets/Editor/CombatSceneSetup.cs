@@ -358,6 +358,19 @@ namespace RPG.EditorTools
                 new Vector2(0.045f, 0.22f), new Vector2(1.00f, 0.79f));
             BuildCharacterSilhouette(charArea, isPlayer);
 
+            // Portrait overlay (real art) — disabled until a Sprite is set at runtime.
+            var portraitGO = new GameObject("Portrait");
+            portraitGO.transform.SetParent(go.transform, false);
+            var portraitRT = portraitGO.AddComponent<RectTransform>();
+            portraitRT.anchorMin = new Vector2(0.045f, 0.22f);
+            portraitRT.anchorMax = new Vector2(1.00f, 0.79f);
+            portraitRT.offsetMin = portraitRT.offsetMax = Vector2.zero;
+            var portraitImg = portraitGO.AddComponent<Image>();
+            portraitImg.color          = Color.white;
+            portraitImg.preserveAspect = true;
+            portraitImg.raycastTarget  = false;
+            portraitImg.enabled        = false;
+
             // ── Unit name label (y: 0.12–0.20) ───────────────────────────
             var (_, lbl) = MakeText(go.transform, "UnitLabel", label,
                 new Vector2(0.045f, 0.12f), new Vector2(0.96f, 0.20f),
@@ -384,6 +397,8 @@ namespace RPG.EditorTools
             so.FindProperty("_hpFill").objectReferenceValue            = hpFill;
             so.FindProperty("_hpLabel").objectReferenceValue           = hpText;
             so.FindProperty("_nameLabel").objectReferenceValue         = lbl;
+            so.FindProperty("_portraitImage").objectReferenceValue     = portraitImg;
+            so.FindProperty("_silhouette").objectReferenceValue        = charArea.gameObject;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             return visual;

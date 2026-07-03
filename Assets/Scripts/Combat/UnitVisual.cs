@@ -19,6 +19,8 @@ namespace Combat
         [SerializeField] private RectTransform  _hpFill;
         [SerializeField] private Text           _hpLabel;
         [SerializeField] private Text           _nameLabel;
+        [SerializeField] private Image          _portraitImage;
+        [SerializeField] private GameObject     _silhouette;
 
         private Image         _image;
         private RectTransform _rt;
@@ -90,6 +92,16 @@ namespace Combat
             if (_turnMeterFill != null) _turnMeterFill.anchorMax = new Vector2(0f, 1f);
             if (_targetHighlight != null) _targetHighlight.enabled = false;
             if (_nameLabel != null) _nameLabel.text = $"{_trackedUnit.Name.ToUpper()}  ·  {_trackedUnit.Element}";
+
+            // Real portrait art replaces the rectangle silhouette when present.
+            bool hasPortrait = _trackedUnit.Portrait != null;
+            if (_portraitImage != null)
+            {
+                _portraitImage.enabled = hasPortrait;
+                if (hasPortrait) _portraitImage.sprite = _trackedUnit.Portrait;
+            }
+            if (_silhouette != null) _silhouette.SetActive(!hasPortrait);
+
             RefreshHP();
             RefreshStatusIcons();
         }

@@ -156,16 +156,25 @@ namespace RPG.EditorTools
             card.AddComponent<Image>().color = new Color(0.09f, 0.09f, 0.15f, 0.98f);
             var t = card.transform;
 
+            var portrait = new GameObject("Portrait");
+            portrait.transform.SetParent(t, false);
+            var portraitRT = portrait.AddComponent<RectTransform>();
+            portraitRT.anchorMin = new Vector2(0.05f, 0.76f); portraitRT.anchorMax = new Vector2(0.27f, 0.965f);
+            portraitRT.offsetMin = portraitRT.offsetMax = Vector2.zero;
+            var portraitImg = portrait.AddComponent<Image>();
+            portraitImg.preserveAspect = true;
+            portraitImg.raycastTarget  = false;
+
             var name = MakeText(t, "Name", "Hero",
-                new Vector2(0.05f, 0.88f), new Vector2(0.80f, 0.96f), 46, FontStyle.Bold, Color.white);
+                new Vector2(0.30f, 0.88f), new Vector2(0.85f, 0.965f), 46, FontStyle.Bold, Color.white);
             name.alignment = TextAnchor.MiddleLeft;
 
             var sub = MakeText(t, "Subtitle", "",
-                new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.875f), 26, FontStyle.Bold, new Color(0.8f, 0.85f, 1f));
+                new Vector2(0.30f, 0.82f), new Vector2(0.95f, 0.875f), 26, FontStyle.Bold, new Color(0.8f, 0.85f, 1f));
             sub.alignment = TextAnchor.MiddleLeft;
 
             var level = MakeText(t, "Level", "",
-                new Vector2(0.05f, 0.77f), new Vector2(0.95f, 0.82f), 28, FontStyle.Bold, new Color(1f, 0.85f, 0.4f));
+                new Vector2(0.30f, 0.77f), new Vector2(0.95f, 0.82f), 28, FontStyle.Bold, new Color(1f, 0.85f, 0.4f));
             level.alignment = TextAnchor.MiddleLeft;
 
             var stats = MakeText(t, "Stats", "",
@@ -193,6 +202,7 @@ namespace RPG.EditorTools
 
             var so = new SerializedObject(ctrl);
             so.FindProperty("_detailPanel").objectReferenceValue           = root.gameObject;
+            so.FindProperty("_detailPortrait").objectReferenceValue        = portraitImg;
             so.FindProperty("_detailName").objectReferenceValue            = name;
             so.FindProperty("_detailSubtitle").objectReferenceValue        = sub;
             so.FindProperty("_detailLevel").objectReferenceValue           = level;

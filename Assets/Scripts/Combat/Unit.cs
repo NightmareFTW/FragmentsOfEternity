@@ -26,6 +26,7 @@ namespace Combat
         public float  Resistance     { get; }   // chance to resist incoming debuffs
         public float  EffectAccuracy { get; }   // chance to bypass a target's resistance
         public Element Element   { get; }
+        public Sprite Portrait   { get; }
         public float  TurnMeter  { get; private set; }
 
         public Team Team { get; set; }
@@ -43,7 +44,7 @@ namespace Combat
                     int attack = 100, int defense = 50,
                     float critRate = 0.05f, float critDamage = 1.5f,
                     float resistance = 0.15f, float effectAccuracy = 0f,
-                    Element element = Element.Fire)
+                    Element element = Element.Fire, Sprite portrait = null)
         {
             Name           = name;
             MaxHP          = hp;
@@ -56,6 +57,7 @@ namespace Combat
             Resistance     = resistance;
             EffectAccuracy = effectAccuracy;
             Element        = element;
+            Portrait       = portrait;
         }
 
         // Builds a combat Unit from a HeroData asset, applying per-level growth.
@@ -73,7 +75,7 @@ namespace Combat
             return new Unit(name, hp, spd, atk, def,
                             data.baseCritRate, data.baseCritDamage,
                             data.baseResistance, data.baseAccuracy,
-                            data.element);
+                            data.element, data.portrait);
         }
 
         // ── Effective stats (base × active status modifiers) ────────────────

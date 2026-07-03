@@ -26,6 +26,7 @@ namespace UI
 
         [Header("Hero detail overlay")]
         [SerializeField] private GameObject _detailPanel;
+        [SerializeField] private Image      _detailPortrait;
         [SerializeField] private Text       _detailName;
         [SerializeField] private Text       _detailSubtitle;
         [SerializeField] private Text       _detailLevel;
@@ -285,6 +286,7 @@ namespace UI
             int gDEF = GearService.BonusDEF(_detailHeroId);
             int gSPD = GearService.BonusSPD(_detailHeroId);
 
+            if (_detailPortrait) _detailPortrait.sprite = PortraitFor(hero);
             if (_detailName)     { _detailName.text = hero.heroName; _detailName.color = RarityColor(hero.rarity); }
             if (_detailSubtitle) _detailSubtitle.text = $"{Stars(hero.rarity)}    {hero.element}    {hero.heroClass}";
             if (_detailLevel)    _detailLevel.text = $"Level {level} / {ProgressionService.MaxLevel}";
@@ -372,8 +374,20 @@ namespace UI
 
             int level = ProgressionService.GetLevel(id);
 
+            // Portrait (real art, or a generated element emblem) on the left.
+            var portGO = new GameObject("Portrait");
+            portGO.transform.SetParent(go.transform, false);
+            var portRT = portGO.AddComponent<RectTransform>();
+            portRT.anchorMin = new Vector2(0.015f, 0.12f);
+            portRT.anchorMax = new Vector2(0.16f,  0.88f);
+            portRT.offsetMin = portRT.offsetMax = Vector2.zero;
+            var portImg = portGO.AddComponent<Image>();
+            portImg.sprite         = PortraitFor(hero);
+            portImg.preserveAspect = true;
+            portImg.raycastTarget  = false;
+
             // Whole cell opens the hero detail (team + leveling live there).
-            var txt = MakeCellText(go.transform, Vector2.zero, Vector2.one);
+            var txt = MakeCellText(go.transform, new Vector2(0.17f, 0f), Vector2.one);
             string check = inTeam ? "[✓] " : "";
             txt.text  = $"{check}{name}  {Stars(rarity)}   Lv {level}   x{count}   ›";
             txt.color = inTeam ? Color.white : new Color(0.85f, 0.9f, 1f);
@@ -427,6 +441,54 @@ namespace UI
             5 => new Color(1f,   0.85f, 0.30f),
             4 => new Color(0.70f, 0.50f, 1f),
             _ => new Color(0.70f, 0.85f, 1f),
+        };
+
+        // ── Portraits ───────────────────────────────────────────────────────
+
+        private static readonly Dictionary<string, Sprite> _emblemCache = new Dictionary<string, Sprite>();
+
+        // Real portrait art if the hero has one; otherwise a generated element emblem.
+        private static Sprite PortraitFor(HeroData hero)
+        {
+            if (hero == null) return null;
+            if (hero.portrait != null) return hero.portrait;
+
+            string key = !string.IsNullOrEmpty(hero.heroId) ? hero.heroId : hero.heroName;
+            if (_emblemCache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+            var emblem = BuildEmblem(ElementColor(hero.element), RarityColor(hero.rarity));
+            _emblemCache[key] = emblem;
+            return emblem;
+        }
+
+        private static Sprite BuildEmblem(Color main, Color ring)
+        {
+            const int S = 96;
+            var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+            float c = (S - 1) * 0.5f, r = S * 0.46f;
+            for (int y = 0; y < S; y++)
+                for (int x = 0; x < S; x++)
+                {
+                    float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / r;
+                    Color col;
+                    if      (d > 1.00f) col = new Color(0f, 0f, 0f, 0f);
+                    else if (d > 0.86f) col = ring;
+                    else                col = Color.Lerp(main * 1.25f, main * 0.55f, d);
+                    tex.SetPixel(x, y, col);
+                }
+            tex.Apply();
+            tex.wrapMode = TextureWrapMode.Clamp;
+            return Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        private static Color ElementColor(Element e) => e switch
+        {
+            Element.Fire  => new Color(0.85f, 0.30f, 0.15f),
+            Element.Ice   => new Color(0.30f, 0.55f, 0.85f),
+            Element.Earth => new Color(0.45f, 0.60f, 0.25f),
+            Element.Light => new Color(0.90f, 0.80f, 0.35f),
+            Element.Dark  => new Color(0.45f, 0.25f, 0.55f),
+            _             => new Color(0.5f, 0.5f, 0.5f),
         };
     }
 }
