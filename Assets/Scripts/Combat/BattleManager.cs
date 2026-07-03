@@ -63,62 +63,97 @@ namespace Combat
 
             _awaitingInput = false;
 
-            var skill  = _activeAlly.Skills[slot];
-            var target = ResolveTarget(skill, _activeAlly);
-            ExecuteSkill(_activeAlly, target, skill);
+            CastSkill(_activeAlly, _activeAlly.Skills[slot]);
             _activeAlly.PutOnCooldown(slot);
             RaiseCooldowns(_activeAlly);
             StartCoroutine(EndTurnDelayed());
         }
 
-        // Auto-targeting for now (manual selection lands in the next part):
-        // heal   → the most-wounded ally (self included);
-        // damage → the highlighted enemy, else the first alive enemy.
-        private Unit ResolveTarget(SkillData skill, Unit caster)
+        // Casts a skill against every unit its TargetType resolves to (relative
+        // to the caster's team), so single- and multi-target share one path.
+        private void CastSkill(Unit caster, SkillData skill)
         {
-            if (skill != null && skill.skillType == SkillType.Buff)
-                return caster;
+            if (skill == null) return;
+            var targets = ResolveTargets(skill, caster);
+            if (targets.Count == 0) return;
 
-            if (skill != null && skill.skillType == SkillType.Heal)
+            // Primary target drives caster-side VFX (lunge / heal glow).
+            EventBus.Raise(new SkillUsedEvent { Skill = skill, Caster = caster, Target = targets[0] });
+
+            foreach (var target in targets)
             {
-                // Honour a hand-picked ally; otherwise heal whoever is most hurt.
-                if (_currentTarget != null && _currentTarget.IsAlive && _currentTarget.Team == Team.Player)
-                    return _currentTarget;
-                return MostWounded(_allies) ?? caster;
-            }
+                switch (skill.skillType)
+                {
+                    case SkillType.Damage:
+                        int roll   = Random.Range(skill.minValue, skill.maxValue + 1);
+                        int dmg    = ComputeDamage(caster, target, roll, skill.canCrit, out bool crit);
+                        int actual = target.TakeDamage(dmg);
+                        EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit });
+                        ApplyEffects(skill.onHitEffects, target);
+                        break;
 
-            // Damage — honour a hand-picked enemy; otherwise the first alive enemy.
-            if (_currentTarget != null && _currentTarget.IsAlive && _currentTarget.Team == Team.Enemy)
-                return _currentTarget;
-            return FirstAlive(_enemies);
-        }
+                    case SkillType.Heal:
+                        int heal   = Random.Range(skill.minValue, skill.maxValue + 1);
+                        int healed = target.Heal(heal);
+                        EventBus.Raise(new UnitHealedEvent { Target = target, Amount = healed });
+                        ApplyEffects(skill.onHitEffects, target);
+                        break;
 
-        private void ExecuteSkill(Unit caster, Unit target, SkillData skill)
-        {
-            if (skill == null || target == null) return;
-            EventBus.Raise(new SkillUsedEvent { Skill = skill, Caster = caster, Target = target });
-
-            switch (skill.skillType)
-            {
-                case SkillType.Damage:
-                    int roll   = Random.Range(skill.minValue, skill.maxValue + 1);
-                    int dmg    = ComputeDamage(caster, target, roll, skill.canCrit, out bool crit);
-                    int actual = target.TakeDamage(dmg);
-                    EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit });
-                    ApplyEffects(skill.onHitEffects, target);
-                    break;
-
-                case SkillType.Heal:
-                    int heal   = Random.Range(skill.minValue, skill.maxValue + 1);
-                    int healed = target.Heal(heal);
-                    EventBus.Raise(new UnitHealedEvent { Target = target, Amount = healed });
-                    break;
-
-                case SkillType.Buff:
-                    break;
+                    case SkillType.Buff:
+                        ApplyEffects(skill.onHitEffects, target);
+                        break;
+                }
             }
 
             ApplyEffects(skill.onSelfEffects, caster);
+        }
+
+        // Resolves the set of units a skill affects, relative to the caster.
+        private List<Unit> ResolveTargets(SkillData skill, Unit caster)
+        {
+            var opponents = caster.Team == Team.Player ? _enemies : _allies;
+            var team      = caster.Team == Team.Player ? _allies  : _enemies;
+            var result    = new List<Unit>();
+
+            switch (skill != null ? skill.targetType : TargetType.SingleEnemy)
+            {
+                case TargetType.Self:
+                    result.Add(caster);
+                    break;
+                case TargetType.AllEnemies:
+                    foreach (var u in opponents) if (u.IsAlive) result.Add(u);
+                    break;
+                case TargetType.AllAllies:
+                    foreach (var u in team) if (u.IsAlive) result.Add(u);
+                    break;
+                case TargetType.SingleAlly:
+                    result.Add(SingleAllyTarget(caster, team));
+                    break;
+                default: // SingleEnemy
+                    result.Add(SingleEnemyTarget(caster, opponents));
+                    break;
+            }
+
+            result.RemoveAll(u => u == null);
+            return result;
+        }
+
+        // Player honours the tapped enemy; the AI just picks someone alive.
+        private Unit SingleEnemyTarget(Unit caster, List<Unit> opponents)
+        {
+            if (caster.Team == Team.Player &&
+                _currentTarget != null && _currentTarget.IsAlive && _currentTarget.Team == Team.Enemy)
+                return _currentTarget;
+            return caster.Team == Team.Player ? FirstAlive(opponents) : RandomAlive(opponents);
+        }
+
+        // Player honours a tapped ally; otherwise heal whoever is most hurt.
+        private Unit SingleAllyTarget(Unit caster, List<Unit> team)
+        {
+            if (caster.Team == Team.Player &&
+                _currentTarget != null && _currentTarget.IsAlive && _currentTarget.Team == Team.Player)
+                return _currentTarget;
+            return MostWounded(team) ?? caster;
         }
 
         private IEnumerator EndTurnDelayed()
@@ -213,24 +248,21 @@ namespace Combat
 
         private void EnemyAct(Unit enemy)
         {
-            Unit hero = RandomAlive(_allies);
-            if (hero == null) return;
-
             SkillData skill = PickEnemySkill(enemy);
             if (skill != null)
             {
-                Unit target = skill.skillType == SkillType.Heal ? enemy : hero;
-                ExecuteSkill(enemy, target, skill);
+                CastSkill(enemy, skill);   // TargetType resolves single/AoE, caster-relative
                 enemy.PutOnCooldown(System.Array.IndexOf(enemy.Skills, skill));
+                return;
             }
-            else
-            {
-                // No skills authored → a plain basic attack.
-                int roll   = Random.Range(10, 17);
-                int dmg    = ComputeDamage(enemy, hero, roll, true, out bool crit);
-                int actual = hero.TakeDamage(dmg);
-                EventBus.Raise(new UnitDamagedEvent { Target = hero, Damage = actual, IsCrit = crit });
-            }
+
+            // No skills authored → a plain basic attack on one random hero.
+            Unit hero = RandomAlive(_allies);
+            if (hero == null) return;
+            int roll   = Random.Range(10, 17);
+            int dmg    = ComputeDamage(enemy, hero, roll, true, out bool crit);
+            int actual = hero.TakeDamage(dmg);
+            EventBus.Raise(new UnitDamagedEvent { Target = hero, Damage = actual, IsCrit = crit });
         }
 
         private SkillData PickEnemySkill(Unit enemy)

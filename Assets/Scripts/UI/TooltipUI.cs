@@ -39,8 +39,13 @@ namespace UI
             if (!string.IsNullOrEmpty(skill.description))
                 sb.AppendLine(skill.description);
 
-            string valueLabel = skill.skillType == SkillType.Heal ? "Heal" : "Damage";
-            sb.AppendLine($"{valueLabel}: {skill.minValue}–{skill.maxValue}");
+            sb.AppendLine($"Target: {TargetLabel(skill.targetType)}");
+
+            if (skill.skillType != SkillType.Buff)
+            {
+                string valueLabel = skill.skillType == SkillType.Heal ? "Heal" : "Damage";
+                sb.AppendLine($"{valueLabel}: {skill.minValue}–{skill.maxValue}");
+            }
 
             if (currentCooldown > 0)
             {
@@ -59,6 +64,16 @@ namespace UI
 
             return sb.ToString();
         }
+
+        private static string TargetLabel(TargetType t) => t switch
+        {
+            TargetType.SingleEnemy => "One enemy",
+            TargetType.AllEnemies  => "All enemies",
+            TargetType.SingleAlly  => "One ally",
+            TargetType.AllAllies   => "All allies",
+            TargetType.Self        => "Self",
+            _                      => t.ToString(),
+        };
 
         private void PositionAbove(RectTransform buttonRT)
         {

@@ -43,13 +43,28 @@ namespace RPG.EditorTools
                 onHit: new[] { Effect(StatusEffectType.Burn, 2, 18) });
 
             var mend = MakeSkill("Mend", "mend",
-                SkillType.Heal, TargetType.SingleAlly, 70, 110, canCrit: false, cooldown: 2,
-                "Channel restorative light to the most wounded ally.");
+                SkillType.Heal, TargetType.AllAllies, 45, 75, canCrit: false, cooldown: 3,
+                "Channel restorative light across the whole party.");
 
             var guard = MakeSkill("Guard", "guard",
                 SkillType.Buff, TargetType.Self, 0, 0, canCrit: false, cooldown: 3,
                 "Brace yourself, sharply raising defence.",
                 onSelf: new[] { Effect(StatusEffectType.DefenseUp, 2, 40) });
+
+            // ── AoE skills ────────────────────────────────────────────────
+            var meteor = MakeSkill("Meteor", "meteor",
+                SkillType.Damage, TargetType.AllEnemies, 20, 40, canCrit: true, cooldown: 3,
+                "Call down fire on every enemy, leaving them burning.",
+                onHit: new[] { Effect(StatusEffectType.Burn, 2, 15) });
+
+            var rally = MakeSkill("Rally", "rally",
+                SkillType.Buff, TargetType.AllAllies, 0, 0, canCrit: false, cooldown: 3,
+                "A war cry that raises the whole party's attack.",
+                onHit: new[] { Effect(StatusEffectType.AttackUp, 2, 20) });
+
+            var cleave = MakeSkill("Cleave", "cleave",
+                SkillType.Damage, TargetType.AllEnemies, 14, 26, canCrit: true, cooldown: 2,
+                "A sweeping blow that strikes all foes at once.");
 
             // ── Allies ────────────────────────────────────────────────────
             var hero = MakeHero("Hero", "hero", Element.Light, HeroClass.Warrior, rarity: 5,
@@ -60,12 +75,12 @@ namespace RPG.EditorTools
             var knight = MakeHero("Knight", "knight", Element.Ice, HeroClass.Knight, rarity: 4,
                 hp: 650, atk: 95, def: 85, spd: 95, critRate: 0.08f, critDmg: 1.5f,
                 hpGrowth: 70f, atkGrowth: 9f, defGrowth: 9f,
-                slash, guard, heavy);
+                slash, rally, heavy);
 
             var mage = MakeHero("Mage", "mage", Element.Fire, HeroClass.Mage, rarity: 5,
                 hp: 420, atk: 130, def: 45, spd: 105, critRate: 0.18f, critDmg: 1.7f,
                 hpGrowth: 45f, atkGrowth: 15f, defGrowth: 4f,
-                fireball, slash, recover);
+                fireball, meteor, recover);
 
             var cleric = MakeHero("Cleric", "cleric", Element.Light, HeroClass.Manauser, rarity: 4,
                 hp: 480, atk: 85, def: 55, spd: 110, critRate: 0.10f, critDmg: 1.5f,
@@ -86,7 +101,7 @@ namespace RPG.EditorTools
             var orc = MakeHero("Orc", "orc", Element.Dark, HeroClass.Warrior, rarity: 4,
                 hp: 600, atk: 100, def: 70, spd: 75, critRate: 0.05f, critDmg: 1.5f,
                 hpGrowth: 65f, atkGrowth: 10f, defGrowth: 7f,
-                heavy, null, null);
+                cleave, heavy, null);
 
             var wolf = MakeHero("Wolf", "wolf", Element.Dark, HeroClass.Thief, rarity: 3,
                 hp: 350, atk: 95, def: 35, spd: 130, critRate: 0.10f, critDmg: 1.5f,
