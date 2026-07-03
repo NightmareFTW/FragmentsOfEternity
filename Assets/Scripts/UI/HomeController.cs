@@ -31,8 +31,11 @@ namespace UI
         [SerializeField] private Text       _detailLevel;
         [SerializeField] private Text       _detailStats;
         [SerializeField] private Text       _detailSkills;
+        [SerializeField] private Text       _detailGear;
         [SerializeField] private Button     _detailLevelUpButton;
         [SerializeField] private Button     _detailTeamButton;
+        [SerializeField] private Button     _detailAutoEquipButton;
+        [SerializeField] private Button     _detailUnequipButton;
         [SerializeField] private Button     _detailCloseButton;
 
         private string _detailHeroId;
@@ -45,6 +48,8 @@ namespace UI
 
             _detailLevelUpButton?.onClick.AddListener(OnDetailLevelUp);
             _detailTeamButton?.onClick.AddListener(OnDetailTeamToggle);
+            _detailAutoEquipButton?.onClick.AddListener(OnDetailAutoEquip);
+            _detailUnequipButton?.onClick.AddListener(OnDetailUnequip);
             _detailCloseButton?.onClick.AddListener(CloseDetail);
             if (_detailPanel) _detailPanel.SetActive(false);
 
@@ -250,6 +255,18 @@ namespace UI
             FillDetail();
         }
 
+        private void OnDetailAutoEquip()
+        {
+            GearService.AutoEquip(_detailHeroId);
+            FillDetail();
+        }
+
+        private void OnDetailUnequip()
+        {
+            GearService.UnequipAll(_detailHeroId);
+            FillDetail();
+        }
+
         private void FillDetail()
         {
             var hero = HeroById(_detailHeroId);
@@ -259,20 +276,26 @@ namespace UI
             int  level  = ProgressionService.GetLevel(_detailHeroId);
             bool inTeam = p.teamHeroIds.Contains(_detailHeroId);
 
+            int gHP  = GearService.BonusHP(_detailHeroId);
+            int gATK = GearService.BonusATK(_detailHeroId);
+            int gDEF = GearService.BonusDEF(_detailHeroId);
+            int gSPD = GearService.BonusSPD(_detailHeroId);
+
             if (_detailName)     { _detailName.text = hero.heroName; _detailName.color = RarityColor(hero.rarity); }
             if (_detailSubtitle) _detailSubtitle.text = $"{Stars(hero.rarity)}    {hero.element}    {hero.heroClass}";
             if (_detailLevel)    _detailLevel.text = $"Level {level} / {ProgressionService.MaxLevel}";
 
             if (_detailStats)
             {
-                int hp  = Mathf.RoundToInt(hero.baseHP  + hero.hpGrowth  * (level - 1));
-                int atk = Mathf.RoundToInt(hero.baseATK + hero.atkGrowth * (level - 1));
-                int def = Mathf.RoundToInt(hero.baseDEF + hero.defGrowth * (level - 1));
+                int hp  = Mathf.RoundToInt(hero.baseHP  + hero.hpGrowth  * (level - 1)) + gHP;
+                int atk = Mathf.RoundToInt(hero.baseATK + hero.atkGrowth * (level - 1)) + gATK;
+                int def = Mathf.RoundToInt(hero.baseDEF + hero.defGrowth * (level - 1)) + gDEF;
+                int spd = hero.baseSPD + gSPD;
                 _detailStats.text =
                     $"HP    {hp}\n" +
                     $"ATK   {atk}\n" +
                     $"DEF   {def}\n" +
-                    $"SPD   {hero.baseSPD}\n" +
+                    $"SPD   {spd}\n" +
                     $"CRIT  {Mathf.RoundToInt(hero.baseCritRate * 100)}%  x{hero.baseCritDamage:0.0}\n" +
                     $"RES   {Mathf.RoundToInt(hero.baseResistance * 100)}%";
             }
@@ -283,6 +306,19 @@ namespace UI
                 foreach (var s in hero.Skills())
                     if (s != null) sb.AppendLine($"<b>{s.skillName}</b>  {s.description}");
                 _detailSkills.text = sb.ToString();
+            }
+
+            if (_detailGear)
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("<b>Gear</b>");
+                foreach (GearSlot slot in System.Enum.GetValues(typeof(GearSlot)))
+                {
+                    var piece = GearService.EquippedOn(_detailHeroId, slot);
+                    sb.AppendLine($"{slot}: {(piece != null ? GearService.Describe(piece) : "(empty)")}");
+                }
+                sb.Append($"Inventory: {GearService.Inventory.Count} pieces");
+                _detailGear.text = sb.ToString();
             }
 
             if (_detailTeamButton) SetButtonLabel(_detailTeamButton, inTeam ? "Remove from Team" : "Add to Team");

@@ -22,6 +22,9 @@ namespace Core
 
         // Per-hero levels (absent id → level 1).
         public List<HeroLevel> heroLevels = new List<HeroLevel>();
+
+        // Owned gear pieces (each carries which hero it's equipped on, if any).
+        public List<GearPiece> gear = new List<GearPiece>();
     }
 
     [Serializable]
@@ -29,5 +32,17 @@ namespace Core
     {
         public string id;
         public int    level = 1;
+    }
+
+    public enum GearSlot { Weapon, Armor, Accessory }
+
+    [Serializable]
+    public class GearPiece
+    {
+        public string   id;
+        public GearSlot  slot;
+        public int       rarity = 3;
+        public int       atk, def, hp, spd;
+        public string    equippedHero = "";   // empty when in the inventory
     }
 }

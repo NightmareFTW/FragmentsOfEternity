@@ -71,7 +71,9 @@ namespace Combat
             {
                 var h = HeroById(id);
                 if (h == null) continue;
-                var u = Unit.FromHeroData(h, ProgressionService.GetLevel(id));
+                var u = Unit.FromHeroData(h, ProgressionService.GetLevel(id),
+                    GearService.BonusHP(id),  GearService.BonusATK(id),
+                    GearService.BonusDEF(id), GearService.BonusSPD(id));
                 u.SetSkills(h.Skills());
                 units.Add(u);
             }

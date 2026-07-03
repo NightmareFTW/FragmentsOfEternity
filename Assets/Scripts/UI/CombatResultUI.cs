@@ -40,9 +40,14 @@ namespace UI
 
             if (_rewardLabel)
             {
-                _rewardLabel.text = evt.Victory
-                    ? $"+{CampaignService.GrantStageVictory(_campaign, CampaignState.SelectedStage)} Gems"
-                    : "No reward — try again!";
+                if (evt.Victory)
+                {
+                    int gems = CampaignService.GrantStageVictory(_campaign, CampaignState.SelectedStage);
+                    var drop = GearService.RollDrop(CampaignState.SelectedStage);
+                    string dropText = drop != null ? $"\n+ {drop.slot}  ({GearService.Describe(drop)})" : "";
+                    _rewardLabel.text = $"+{gems} Gems{dropText}";
+                }
+                else _rewardLabel.text = "No reward — try again!";
             }
         }
 

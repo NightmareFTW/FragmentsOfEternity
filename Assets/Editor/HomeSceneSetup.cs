@@ -169,30 +169,41 @@ namespace RPG.EditorTools
             level.alignment = TextAnchor.MiddleLeft;
 
             var stats = MakeText(t, "Stats", "",
-                new Vector2(0.05f, 0.42f), new Vector2(0.50f, 0.76f), 26, FontStyle.Bold, new Color(0.85f, 0.9f, 1f));
+                new Vector2(0.05f, 0.52f), new Vector2(0.50f, 0.75f), 26, FontStyle.Bold, new Color(0.85f, 0.9f, 1f));
             stats.alignment = TextAnchor.UpperLeft;
 
+            var gear = MakeText(t, "Gear", "",
+                new Vector2(0.05f, 0.27f), new Vector2(0.50f, 0.51f), 22, FontStyle.Normal, new Color(0.75f, 0.92f, 0.82f));
+            gear.alignment = TextAnchor.UpperLeft;
+
             var skills = MakeText(t, "Skills", "",
-                new Vector2(0.50f, 0.28f), new Vector2(0.97f, 0.76f), 20, FontStyle.Normal, new Color(0.85f, 0.9f, 1f));
+                new Vector2(0.52f, 0.27f), new Vector2(0.97f, 0.75f), 20, FontStyle.Normal, new Color(0.85f, 0.9f, 1f));
             skills.alignment = TextAnchor.UpperLeft;
 
             var levelUp = MakeButton(t, "LevelUpBtn", "Level Up",
-                new Vector2(0.05f, 0.05f), new Vector2(0.48f, 0.14f), new Color(0.24f, 0.46f, 0.30f));
+                new Vector2(0.05f, 0.15f), new Vector2(0.48f, 0.225f), new Color(0.24f, 0.46f, 0.30f));
+            var autoEquip = MakeButton(t, "AutoEquipBtn", "Auto-Equip",
+                new Vector2(0.52f, 0.15f), new Vector2(0.95f, 0.225f), new Color(0.30f, 0.42f, 0.55f));
             var team = MakeButton(t, "TeamBtn", "Add to Team",
-                new Vector2(0.52f, 0.05f), new Vector2(0.95f, 0.14f), new Color(0.45f, 0.30f, 0.65f));
+                new Vector2(0.05f, 0.05f), new Vector2(0.48f, 0.125f), new Color(0.45f, 0.30f, 0.65f));
+            var unequip = MakeButton(t, "UnequipBtn", "Unequip",
+                new Vector2(0.52f, 0.05f), new Vector2(0.95f, 0.125f), new Color(0.40f, 0.28f, 0.30f));
             var close = MakeButton(t, "CloseBtn", "X",
                 new Vector2(0.86f, 0.88f), new Vector2(0.98f, 0.97f), new Color(0.35f, 0.16f, 0.18f));
 
             var so = new SerializedObject(ctrl);
-            so.FindProperty("_detailPanel").objectReferenceValue         = root.gameObject;
-            so.FindProperty("_detailName").objectReferenceValue          = name;
-            so.FindProperty("_detailSubtitle").objectReferenceValue      = sub;
-            so.FindProperty("_detailLevel").objectReferenceValue         = level;
-            so.FindProperty("_detailStats").objectReferenceValue         = stats;
-            so.FindProperty("_detailSkills").objectReferenceValue        = skills;
-            so.FindProperty("_detailLevelUpButton").objectReferenceValue = levelUp;
-            so.FindProperty("_detailTeamButton").objectReferenceValue    = team;
-            so.FindProperty("_detailCloseButton").objectReferenceValue   = close;
+            so.FindProperty("_detailPanel").objectReferenceValue           = root.gameObject;
+            so.FindProperty("_detailName").objectReferenceValue            = name;
+            so.FindProperty("_detailSubtitle").objectReferenceValue        = sub;
+            so.FindProperty("_detailLevel").objectReferenceValue           = level;
+            so.FindProperty("_detailStats").objectReferenceValue           = stats;
+            so.FindProperty("_detailSkills").objectReferenceValue          = skills;
+            so.FindProperty("_detailGear").objectReferenceValue            = gear;
+            so.FindProperty("_detailLevelUpButton").objectReferenceValue   = levelUp;
+            so.FindProperty("_detailTeamButton").objectReferenceValue      = team;
+            so.FindProperty("_detailAutoEquipButton").objectReferenceValue = autoEquip;
+            so.FindProperty("_detailUnequipButton").objectReferenceValue   = unequip;
+            so.FindProperty("_detailCloseButton").objectReferenceValue     = close;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             root.gameObject.SetActive(false);

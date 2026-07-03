@@ -60,15 +60,17 @@ namespace Combat
 
         // Builds a combat Unit from a HeroData asset, applying per-level growth.
         // Level 1 uses the base stats as-authored.
-        public static Unit FromHeroData(HeroData data, int level = 1)
+        public static Unit FromHeroData(HeroData data, int level = 1,
+            int bonusHP = 0, int bonusATK = 0, int bonusDEF = 0, int bonusSPD = 0)
         {
             int lv  = Mathf.Max(1, level);
-            int hp  = Mathf.RoundToInt(data.baseHP  + data.hpGrowth  * (lv - 1));
-            int atk = Mathf.RoundToInt(data.baseATK + data.atkGrowth * (lv - 1));
-            int def = Mathf.RoundToInt(data.baseDEF + data.defGrowth * (lv - 1));
+            int hp  = Mathf.RoundToInt(data.baseHP  + data.hpGrowth  * (lv - 1)) + bonusHP;
+            int atk = Mathf.RoundToInt(data.baseATK + data.atkGrowth * (lv - 1)) + bonusATK;
+            int def = Mathf.RoundToInt(data.baseDEF + data.defGrowth * (lv - 1)) + bonusDEF;
+            int spd = data.baseSPD + bonusSPD;
             string name = string.IsNullOrEmpty(data.heroName) ? data.name : data.heroName;
 
-            return new Unit(name, hp, data.baseSPD, atk, def,
+            return new Unit(name, hp, spd, atk, def,
                             data.baseCritRate, data.baseCritDamage,
                             data.baseResistance, data.baseAccuracy,
                             data.element);
