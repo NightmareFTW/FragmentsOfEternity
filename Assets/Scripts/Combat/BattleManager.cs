@@ -86,9 +86,9 @@ namespace Combat
                 {
                     case SkillType.Damage:
                         int roll   = Random.Range(skill.minValue, skill.maxValue + 1);
-                        int dmg    = ComputeDamage(caster, target, roll, skill.canCrit, out bool crit);
+                        int dmg    = ComputeDamage(caster, target, roll, skill.canCrit, out bool crit, out int adv);
                         int actual = target.TakeDamage(dmg);
-                        EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit });
+                        EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit, Advantage = adv });
                         ApplyEffects(skill.onHitEffects, target, caster);
                         break;
 
@@ -279,9 +279,9 @@ namespace Combat
             if (target == null) return;
 
             int roll   = Random.Range(10, 17);
-            int dmg    = ComputeDamage(caster, target, roll, true, out bool crit);
+            int dmg    = ComputeDamage(caster, target, roll, true, out bool crit, out int adv);
             int actual = target.TakeDamage(dmg);
-            EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit });
+            EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit, Advantage = adv });
         }
 
         private SkillData PickEnemySkill(Unit enemy)
@@ -295,14 +295,36 @@ namespace Combat
 
         // ── Combat math ──────────────────────────────────────────────────────
 
-        private int ComputeDamage(Unit caster, Unit target, int roll, bool canCrit, out bool isCrit)
+        private int ComputeDamage(Unit caster, Unit target, int roll, bool canCrit, out bool isCrit, out int advantage)
         {
             float raw       = roll * (caster.EffectiveAttack / 100f);
             float mitigated = raw * (100f / (100f + target.EffectiveDefense));
+
             isCrit = canCrit && Random.value < caster.CritRate;
             if (isCrit) mitigated *= caster.CritDamage;
+
+            advantage = ElementalAdvantage(caster.Element, target.Element);
+            if (advantage > 0)      mitigated *= 1.5f;
+            else if (advantage < 0) mitigated *= 0.75f;
+
             return Mathf.Max(1, Mathf.RoundToInt(mitigated));
         }
+
+        // +1 the attacker has the edge, -1 the attacker is weak, 0 neutral.
+        // Triangle: Fire > Earth > Ice > Fire; Light and Dark best each other.
+        private static int ElementalAdvantage(Element a, Element d)
+        {
+            if (Beats(a, d)) return 1;
+            if (Beats(d, a)) return -1;
+            if ((a == Element.Light && d == Element.Dark) ||
+                (a == Element.Dark  && d == Element.Light)) return 1;
+            return 0;
+        }
+
+        private static bool Beats(Element a, Element d) =>
+            (a == Element.Fire  && d == Element.Earth) ||
+            (a == Element.Earth && d == Element.Ice)   ||
+            (a == Element.Ice   && d == Element.Fire);
 
         // Applies a skill's effects to a unit. Debuffs can be resisted based on
         // the target's Resistance vs the caster's EffectAccuracy; buffs always land.
@@ -391,7 +413,7 @@ namespace Combat
     public struct SkillUsedEvent              { public SkillData Skill; public Unit Caster; public Unit Target; }
     public struct CombatInitEvent            { public List<Unit> Allies; public List<Unit> Enemies; }
     public struct TurnStartedEvent           { public Unit Actor; }
-    public struct UnitDamagedEvent           { public Unit Target; public int Damage; public bool IsCrit; public bool IsDoT; }
+    public struct UnitDamagedEvent           { public Unit Target; public int Damage; public bool IsCrit; public bool IsDoT; public int Advantage; }
     public struct UnitHealedEvent            { public Unit Target; public int Amount; }
     public struct UnitStunnedEvent           { public Unit Actor; }
     public struct TargetChangedEvent         { public Unit Target; }

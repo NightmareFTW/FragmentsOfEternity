@@ -89,7 +89,7 @@ namespace Combat
             _canvasOriginalPos   = _canvasRT != null ? _canvasRT.anchoredPosition : Vector2.zero;
             if (_turnMeterFill != null) _turnMeterFill.anchorMax = new Vector2(0f, 1f);
             if (_targetHighlight != null) _targetHighlight.enabled = false;
-            if (_nameLabel != null) _nameLabel.text = _trackedUnit.Name.ToUpper();
+            if (_nameLabel != null) _nameLabel.text = $"{_trackedUnit.Name.ToUpper()}  ·  {_trackedUnit.Element}";
             RefreshHP();
             RefreshStatusIcons();
         }
@@ -127,7 +127,7 @@ namespace Combat
                 PlayAttackAnimation();
             else
             {
-                ShowHit(evt.Damage, evt.IsCrit);
+                ShowHit(evt.Damage, evt.IsCrit, evt.Advantage);
                 RefreshHP();
             }
         }
@@ -200,7 +200,7 @@ namespace Combat
 
         // ── Public surface ────────────────────────────────────────────────
 
-        public void ShowHit(int damage, bool isCrit = false)
+        public void ShowHit(int damage, bool isCrit = false, int advantage = 0)
         {
             string unitName = _trackedUnit?.Name ?? "?";
 
@@ -228,7 +228,8 @@ namespace Combat
                 damage,
                 isCrit ? new Color(1f, 0.35f, 0.20f) : new Color(1f, 0.9f, 0.15f),
                 isCrit ? 66 : 48,
-                isCrit));
+                isCrit,
+                advantage));
         }
 
         // Lightweight feedback for damage-over-time: a coloured number and a
@@ -852,7 +853,7 @@ namespace Combat
 
         // ── Floating damage number ────────────────────────────────────────
 
-        private IEnumerator SpawnDamageNumber(int damage, Color color, int fontSize, bool isCrit)
+        private IEnumerator SpawnDamageNumber(int damage, Color color, int fontSize, bool isCrit, int advantage = 0)
         {
             var go = new GameObject("DmgNum");
             go.transform.SetParent(_canvasRoot, false);
@@ -860,15 +861,20 @@ namespace Combat
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin        = rt.anchorMax = _damageSpawnAnchor;
             rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta        = new Vector2(180f, 80f);
+            rt.sizeDelta        = new Vector2(200f, 80f);
 
-            // A fully-absorbed hit (0 HP lost) reads as a shield BLOCK.
-            bool  blocked = damage <= 0;
-            Color col     = blocked ? new Color(0.5f, 0.85f, 1f) : color;
+            // A fully-absorbed hit (0 HP lost) reads as a shield BLOCK. Elemental
+            // advantage / weakness colours the number and adds a ▲ / ▼ marker.
+            bool   blocked = damage <= 0;
+            string mark    = advantage > 0 ? "  ▲" : advantage < 0 ? "  ▼" : "";
+            Color  col     = blocked            ? new Color(0.50f, 0.85f, 1.00f)
+                           : advantage > 0      ? new Color(1.00f, 0.45f, 0.15f)   // super-effective
+                           : advantage < 0      ? new Color(0.70f, 0.72f, 0.78f)   // resisted element
+                           :                      color;
 
             var txt = go.AddComponent<Text>();
             txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            txt.text = blocked ? "BLOCK" : (isCrit ? $"-{damage}!" : $"-{damage}");
+            txt.text = blocked ? "BLOCK" : (isCrit ? $"-{damage}!{mark}" : $"-{damage}{mark}");
             txt.fontSize = fontSize; txt.fontStyle = FontStyle.Bold;
             txt.alignment = TextAnchor.MiddleCenter; txt.color = col;
 
