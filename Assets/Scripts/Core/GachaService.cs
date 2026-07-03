@@ -16,7 +16,7 @@ namespace Core
     // with a pity guarantee that forces a 5★ after enough dry pulls.
     public static class GachaService
     {
-        public const int PityThreshold = 20;
+        public const int PityThreshold = 15;
 
         public static SummonResult Summon(GachaPool pool)
         {

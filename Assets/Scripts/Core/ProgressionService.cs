@@ -13,7 +13,7 @@ namespace Core
             return 1;
         }
 
-        public static int CostToLevel(int currentLevel) => 100 * currentLevel;
+        public static int CostToLevel(int currentLevel) => 50 * currentLevel;
 
         // Returns the new level, or -1 when it can't level up (max or too poor).
         public static int LevelUp(string heroId)

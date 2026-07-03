@@ -312,7 +312,7 @@ namespace Combat
             Unit target   = caster.Team == Team.Player ? FirstAlive(opponents) : RandomAlive(opponents);
             if (target == null) return;
 
-            int roll   = Random.Range(10, 17);
+            int roll   = Random.Range(12, 20);
             int dmg    = ComputeDamage(caster, target, roll, true, out bool crit, out int adv);
             int actual = target.TakeDamage(dmg);
             EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit, Advantage = adv });

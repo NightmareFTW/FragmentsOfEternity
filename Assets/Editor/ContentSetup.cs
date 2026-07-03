@@ -119,14 +119,14 @@ namespace RPG.EditorTools
             var allyRoster  = new[] { hero, knight, mage, cleric };
             var enemyRoster = new[] { goblin, grunt, orc, wolf };
             var s1 = MakeEncounter("Stage 1", "stage_1", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 1);
-            var s2 = MakeEncounter("Stage 2", "stage_2", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 4);
-            var s3 = MakeEncounter("Stage 3", "stage_3", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 7);
+            var s2 = MakeEncounter("Stage 2", "stage_2", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 3);
+            var s3 = MakeEncounter("Stage 3", "stage_3", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 5);
 
             // ── Campaign (rewards rise with difficulty) ───────────────────
             MakeCampaign(
                 ("Stage 1 — Skirmish", s1, 150),
-                ("Stage 2 — Warband",  s2, 250),
-                ("Stage 3 — Warlord",  s3, 400));
+                ("Stage 2 — Warband",  s2, 280),
+                ("Stage 3 — Warlord",  s3, 450));
 
             // ── Gacha pool (the four summonable heroes) ───────────────────
             MakeGachaPool(new[] { hero, knight, mage, cleric }, summonCost: 300);
