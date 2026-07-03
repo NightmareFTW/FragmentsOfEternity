@@ -25,6 +25,7 @@ namespace UI
         private bool        _isPlayerTurn;
         private bool        _combatOver;
         private bool        _inputLocked;
+        private bool        _silenced;
         private int[]       _prevCooldowns = new int[]  { 0, 0, 0 };
         private bool[]      _shaking       = new bool[] { false, false, false };
 
@@ -66,6 +67,7 @@ namespace UI
             if (evt.Owner != null && evt.Owner.Team != Team.Player) return;   // ignore enemies
             _playerSkills    = evt.Skills;
             _cachedCooldowns = evt.Cooldowns;
+            _silenced        = evt.Silenced;
             RefreshButtonStates();
         }
 
@@ -112,7 +114,7 @@ namespace UI
             }
 
             int cd = (_cachedCooldowns != null && slot < _cachedCooldowns.Length) ? _cachedCooldowns[slot] : 0;
-            bool canUse = cd == 0 && _isPlayerTurn && !_combatOver && !_inputLocked;
+            bool canUse = cd == 0 && _isPlayerTurn && !_combatOver && !_inputLocked && !_silenced;
 
             // Punch animation when a skill first goes on cooldown.
             if (cd > 0 && _prevCooldowns[slot] == 0 && !_shaking[slot])

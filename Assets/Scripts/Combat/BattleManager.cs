@@ -89,23 +89,23 @@ namespace Combat
                         int dmg    = ComputeDamage(caster, target, roll, skill.canCrit, out bool crit);
                         int actual = target.TakeDamage(dmg);
                         EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit });
-                        ApplyEffects(skill.onHitEffects, target);
+                        ApplyEffects(skill.onHitEffects, target, caster);
                         break;
 
                     case SkillType.Heal:
                         int heal   = Random.Range(skill.minValue, skill.maxValue + 1);
                         int healed = target.Heal(heal);
                         EventBus.Raise(new UnitHealedEvent { Target = target, Amount = healed });
-                        ApplyEffects(skill.onHitEffects, target);
+                        ApplyEffects(skill.onHitEffects, target, caster);
                         break;
 
                     case SkillType.Buff:
-                        ApplyEffects(skill.onHitEffects, target);
+                        ApplyEffects(skill.onHitEffects, target, caster);
                         break;
                 }
             }
 
-            ApplyEffects(skill.onSelfEffects, caster);
+            ApplyEffects(skill.onSelfEffects, caster, caster);
         }
 
         // Resolves the set of units a skill affects, relative to the caster.
@@ -223,11 +223,23 @@ namespace Combat
             {
                 actor.TickCooldowns();
                 _activeAlly = actor;
-                RaiseCooldowns(actor);                                    // HUD caches ticked cooldowns
-                EventBus.Raise(new TurnStartedEvent { Actor = actor });   // then enables buttons
-                _currentTarget = FirstAlive(_enemies);
-                EventBus.Raise(new TargetChangedEvent { Target = _currentTarget });
-                _awaitingInput = true;
+                RaiseCooldowns(actor);                                    // HUD caches cooldowns + silence
+                EventBus.Raise(new TurnStartedEvent { Actor = actor });
+
+                if (actor.IsSilenced)
+                {
+                    // Can't cast while silenced — a forced basic attack.
+                    yield return new WaitForSeconds(0.7f);
+                    BasicAttack(actor);
+                    yield return new WaitForSeconds(0.5f);
+                    EndTurn();
+                }
+                else
+                {
+                    _currentTarget = FirstAlive(_enemies);
+                    EventBus.Raise(new TargetChangedEvent { Target = _currentTarget });
+                    _awaitingInput = true;
+                }
             }
         }
 
@@ -248,7 +260,7 @@ namespace Combat
 
         private void EnemyAct(Unit enemy)
         {
-            SkillData skill = PickEnemySkill(enemy);
+            SkillData skill = enemy.IsSilenced ? null : PickEnemySkill(enemy);
             if (skill != null)
             {
                 CastSkill(enemy, skill);   // TargetType resolves single/AoE, caster-relative
@@ -256,13 +268,20 @@ namespace Combat
                 return;
             }
 
-            // No skills authored → a plain basic attack on one random hero.
-            Unit hero = RandomAlive(_allies);
-            if (hero == null) return;
+            BasicAttack(enemy);   // no usable skill (none authored or silenced)
+        }
+
+        // A plain single-target strike — used for basic attacks and while silenced.
+        private void BasicAttack(Unit caster)
+        {
+            var opponents = caster.Team == Team.Player ? _enemies : _allies;
+            Unit target   = caster.Team == Team.Player ? FirstAlive(opponents) : RandomAlive(opponents);
+            if (target == null) return;
+
             int roll   = Random.Range(10, 17);
-            int dmg    = ComputeDamage(enemy, hero, roll, true, out bool crit);
-            int actual = hero.TakeDamage(dmg);
-            EventBus.Raise(new UnitDamagedEvent { Target = hero, Damage = actual, IsCrit = crit });
+            int dmg    = ComputeDamage(caster, target, roll, true, out bool crit);
+            int actual = target.TakeDamage(dmg);
+            EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit });
         }
 
         private SkillData PickEnemySkill(Unit enemy)
@@ -285,22 +304,44 @@ namespace Combat
             return Mathf.Max(1, Mathf.RoundToInt(mitigated));
         }
 
-        private void ApplyEffects(StatusEffectEntry[] effects, Unit target)
+        // Applies a skill's effects to a unit. Debuffs can be resisted based on
+        // the target's Resistance vs the caster's EffectAccuracy; buffs always land.
+        private void ApplyEffects(StatusEffectEntry[] effects, Unit target, Unit caster)
         {
             if (effects == null || effects.Length == 0 || target == null) return;
             foreach (var e in effects)
             {
+                if (IsDebuff(e.type) && Resisted(caster, target))
+                {
+                    EventBus.Raise(new UnitResistedEvent { Target = target });
+                    continue;
+                }
                 target.AddEffect(e);
                 EventBus.Raise(new StatusEffectAppliedEvent { Target = target });
             }
         }
+
+        private static bool Resisted(Unit caster, Unit target)
+        {
+            float chance = Mathf.Clamp01(target.Resistance - (caster != null ? caster.EffectAccuracy : 0f));
+            return Random.value < chance;
+        }
+
+        private static bool IsDebuff(StatusEffectType t) => t switch
+        {
+            StatusEffectType.Poison or StatusEffectType.Burn  or StatusEffectType.Bleed   or
+            StatusEffectType.Stun   or StatusEffectType.Sleep or StatusEffectType.Silence or
+            StatusEffectType.AttackDebuff or StatusEffectType.DefenseDebuff or StatusEffectType.SpeedDebuff => true,
+            _ => false,
+        };
 
         private void RaiseCooldowns(Unit ally) =>
             EventBus.Raise(new SkillCooldownsChangedEvent
             {
                 Owner     = ally,
                 Skills    = ally.Skills,
-                Cooldowns = ally.CooldownSnapshot()
+                Cooldowns = ally.CooldownSnapshot(),
+                Silenced  = ally.IsSilenced
             });
 
         // ── Team helpers ──────────────────────────────────────────────────────
@@ -355,6 +396,7 @@ namespace Combat
     public struct UnitStunnedEvent           { public Unit Actor; }
     public struct TargetChangedEvent         { public Unit Target; }
     public struct UnitClickedEvent           { public Unit Unit; }
-    public struct SkillCooldownsChangedEvent  { public Unit Owner; public SkillData[] Skills; public int[] Cooldowns; }
+    public struct UnitResistedEvent          { public Unit Target; }
+    public struct SkillCooldownsChangedEvent  { public Unit Owner; public SkillData[] Skills; public int[] Cooldowns; public bool Silenced; }
     public struct StatusEffectAppliedEvent    { public Unit Target; }
 }

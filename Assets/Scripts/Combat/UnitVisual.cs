@@ -54,6 +54,7 @@ namespace Combat
             EventBus.Subscribe<UnitDamagedEvent>(OnUnitDamagedAnim);
             EventBus.Subscribe<UnitHealedEvent>(OnUnitHealedAnim);
             EventBus.Subscribe<StatusEffectAppliedEvent>(OnStatusEffectApplied);
+            EventBus.Subscribe<UnitResistedEvent>(OnUnitResisted);
         }
 
         private void OnDestroy()
@@ -67,6 +68,7 @@ namespace Combat
             EventBus.Unsubscribe<UnitDamagedEvent>(OnUnitDamagedAnim);
             EventBus.Unsubscribe<UnitHealedEvent>(OnUnitHealedAnim);
             EventBus.Unsubscribe<StatusEffectAppliedEvent>(OnStatusEffectApplied);
+            EventBus.Unsubscribe<UnitResistedEvent>(OnUnitResisted);
         }
 
         // ── Event handlers ────────────────────────────────────────────────
@@ -143,6 +145,11 @@ namespace Combat
         private void OnStatusEffectApplied(StatusEffectAppliedEvent evt)
         {
             if (evt.Target == _trackedUnit) RefreshStatusIcons();
+        }
+
+        private void OnUnitResisted(UnitResistedEvent evt)
+        {
+            if (evt.Target == _trackedUnit) ShowResist();
         }
 
         private void OnSkillUsed(SkillUsedEvent evt)
@@ -246,6 +253,45 @@ namespace Combat
         {
             if (amount <= 0 || _canvasRoot == null) return;
             StartCoroutine(SpawnHealNumber(amount));
+        }
+
+        // Grey "RESIST" when a debuff is shrugged off.
+        private void ShowResist()
+        {
+            if (_canvasRoot != null)
+                StartCoroutine(SpawnFloatingText("RESIST", new Color(0.78f, 0.80f, 0.88f), 34));
+        }
+
+        private IEnumerator SpawnFloatingText(string text, Color color, int fontSize)
+        {
+            var go = new GameObject("FloatText");
+            go.transform.SetParent(_canvasRoot, false);
+
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = _damageSpawnAnchor;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(220f, 70f);
+
+            var txt = go.AddComponent<Text>();
+            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            txt.text = text; txt.fontSize = fontSize; txt.fontStyle = FontStyle.Bold;
+            txt.alignment = TextAnchor.MiddleCenter; txt.color = color;
+
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor    = new Color(0f, 0f, 0f, 0.6f);
+            shadow.effectDistance = new Vector2(2f, -2f);
+
+            float elapsed = 0f;
+            const float Dur = 0.75f;
+            while (elapsed < Dur)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / Dur;
+                rt.anchoredPosition = new Vector2(0f, Mathf.Lerp(0f, 110f, t));
+                txt.color = new Color(color.r, color.g, color.b, 1f - t);
+                yield return null;
+            }
+            Destroy(go);
         }
 
         private IEnumerator SpawnHealNumber(int amount)
@@ -776,6 +822,9 @@ namespace Combat
             StatusEffectType.Bleed         => new Color(0.60f, 0.08f, 0.12f),
             StatusEffectType.Stun          => new Color(0.85f, 0.70f, 0.15f),
             StatusEffectType.Sleep         => new Color(0.30f, 0.30f, 0.55f),
+            StatusEffectType.Silence       => new Color(0.45f, 0.30f, 0.55f),
+            StatusEffectType.Shield        => new Color(0.25f, 0.65f, 0.85f),
+            StatusEffectType.Barrier       => new Color(0.30f, 0.55f, 0.80f),
             _                              => new Color(0.20f, 0.20f, 0.20f),
         };
 
@@ -792,6 +841,9 @@ namespace Combat
             StatusEffectType.Bleed         => "BLD",
             StatusEffectType.Stun          => "STN",
             StatusEffectType.Sleep         => "SLP",
+            StatusEffectType.Silence       => "SIL",
+            StatusEffectType.Shield        => "SHD",
+            StatusEffectType.Barrier       => "BAR",
             _                              => t.ToString().Substring(0, 1),
         };
 
@@ -807,11 +859,15 @@ namespace Combat
             rt.anchoredPosition = Vector2.zero;
             rt.sizeDelta        = new Vector2(180f, 80f);
 
+            // A fully-absorbed hit (0 HP lost) reads as a shield BLOCK.
+            bool  blocked = damage <= 0;
+            Color col     = blocked ? new Color(0.5f, 0.85f, 1f) : color;
+
             var txt = go.AddComponent<Text>();
             txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            txt.text = isCrit ? $"-{damage}!" : $"-{damage}";
+            txt.text = blocked ? "BLOCK" : (isCrit ? $"-{damage}!" : $"-{damage}");
             txt.fontSize = fontSize; txt.fontStyle = FontStyle.Bold;
-            txt.alignment = TextAnchor.MiddleCenter; txt.color = color;
+            txt.alignment = TextAnchor.MiddleCenter; txt.color = col;
 
             var shadow = go.AddComponent<Shadow>();
             shadow.effectColor    = new Color(0f, 0f, 0f, 0.6f);
@@ -828,7 +884,7 @@ namespace Combat
                 rt.anchoredPosition = new Vector2(0f, Mathf.Lerp(0f, rise, t));
                 float s = Mathf.Lerp(pop, 1f, Mathf.Clamp01(t * 3f));
                 go.transform.localScale = new Vector3(s, s, 1f);
-                txt.color = new Color(color.r, color.g, color.b, 1f - t);
+                txt.color = new Color(col.r, col.g, col.b, 1f - t);
                 yield return null;
             }
 

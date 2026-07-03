@@ -23,6 +23,8 @@ namespace Combat
         public int    BaseSpeed   { get; }
         public float  CritRate   { get; }
         public float  CritDamage { get; }
+        public float  Resistance     { get; }   // chance to resist incoming debuffs
+        public float  EffectAccuracy { get; }   // chance to bypass a target's resistance
         public float  TurnMeter  { get; private set; }
 
         public Team Team { get; set; }
@@ -38,16 +40,19 @@ namespace Combat
 
         public Unit(string name, int hp, int speed,
                     int attack = 100, int defense = 50,
-                    float critRate = 0.05f, float critDamage = 1.5f)
+                    float critRate = 0.05f, float critDamage = 1.5f,
+                    float resistance = 0.15f, float effectAccuracy = 0f)
         {
-            Name        = name;
-            MaxHP       = hp;
-            HP          = hp;
-            BaseSpeed   = speed;
-            BaseAttack  = attack;
-            BaseDefense = defense;
-            CritRate    = critRate;
-            CritDamage  = critDamage;
+            Name           = name;
+            MaxHP          = hp;
+            HP             = hp;
+            BaseSpeed      = speed;
+            BaseAttack     = attack;
+            BaseDefense    = defense;
+            CritRate       = critRate;
+            CritDamage     = critDamage;
+            Resistance     = resistance;
+            EffectAccuracy = effectAccuracy;
         }
 
         // Builds a combat Unit from a HeroData asset, applying per-level growth.
@@ -61,7 +66,8 @@ namespace Combat
             string name = string.IsNullOrEmpty(data.heroName) ? data.name : data.heroName;
 
             return new Unit(name, hp, data.baseSPD, atk, def,
-                            data.baseCritRate, data.baseCritDamage);
+                            data.baseCritRate, data.baseCritDamage,
+                            data.baseResistance, data.baseAccuracy);
         }
 
         // ── Effective stats (base × active status modifiers) ────────────────
@@ -100,12 +106,26 @@ namespace Combat
 
         public void ConsumeMeter() => TurnMeter = 0f;
 
+        // Incoming damage is absorbed by any Shield/Barrier effects first
+        // (consuming their Value), then the remainder comes off HP. Returns the
+        // HP actually lost (0 when fully shielded).
         public int TakeDamage(int amount)
         {
-            int actual = Mathf.Min(amount, HP);
-            HP = Mathf.Max(0, HP - amount);
-            // Direct hits rouse a sleeping unit.
-            RemoveEffects(StatusEffectType.Sleep);
+            if (amount > 0) RemoveEffects(StatusEffectType.Sleep);   // a landed hit wakes
+
+            int remaining = amount;
+            for (int i = _activeEffects.Count - 1; i >= 0 && remaining > 0; i--)
+            {
+                var e = _activeEffects[i];
+                if (e.Type != StatusEffectType.Shield && e.Type != StatusEffectType.Barrier) continue;
+                int absorb = Mathf.Min(e.Value, remaining);
+                e.Value   -= absorb;
+                remaining -= absorb;
+                if (e.Value <= 0) _activeEffects.RemoveAt(i);
+            }
+
+            int actual = Mathf.Min(remaining, HP);
+            HP = Mathf.Max(0, HP - remaining);
             return actual;
         }
 
