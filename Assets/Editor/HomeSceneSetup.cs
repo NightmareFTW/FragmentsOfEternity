@@ -13,8 +13,9 @@ namespace RPG.EditorTools
     // registers Boot/Home/Combat in Build Settings so scene loads work at runtime.
     public static class HomeSceneSetup
     {
-        private const string ScenePath = "Assets/Scenes/Home.unity";
-        private const string PoolPath  = "Assets/ScriptableObjects/GachaPool.asset";
+        private const string ScenePath    = "Assets/Scenes/Home.unity";
+        private const string PoolPath     = "Assets/ScriptableObjects/GachaPool.asset";
+        private const string CampaignPath = "Assets/ScriptableObjects/Campaign.asset";
 
         [MenuItem("RPG/Setup Home Scene", priority = 3)]
         public static void Setup()
@@ -41,26 +42,29 @@ namespace RPG.EditorTools
                 new Color(0.6f, 0.9f, 1f));
 
             var result = MakeText(canvas.transform, "ResultLabel", "",
-                new Vector2(0.05f, 0.725f), new Vector2(0.95f, 0.79f), 44, FontStyle.Bold, Color.white);
+                new Vector2(0.05f, 0.76f), new Vector2(0.95f, 0.81f), 44, FontStyle.Bold, Color.white);
 
             var team = MakeText(canvas.transform, "TeamLabel", "Team: 0/4",
-                new Vector2(0.05f, 0.665f), new Vector2(0.95f, 0.712f), 28, FontStyle.Bold,
+                new Vector2(0.05f, 0.71f), new Vector2(0.95f, 0.755f), 28, FontStyle.Bold,
                 new Color(1f, 0.85f, 0.4f));
 
             var grid = MakeContainer(canvas.transform, "CollectionGrid",
-                new Vector2(0.06f, 0.30f), new Vector2(0.94f, 0.655f));
+                new Vector2(0.06f, 0.44f), new Vector2(0.94f, 0.70f));
+
+            MakeText(canvas.transform, "CampaignLabel", "Campaign — pick a stage",
+                new Vector2(0.05f, 0.395f), new Vector2(0.95f, 0.435f), 26, FontStyle.Bold,
+                new Color(0.85f, 0.9f, 1f));
+
+            var stages = MakeContainer(canvas.transform, "StageRow",
+                new Vector2(0.04f, 0.285f), new Vector2(0.96f, 0.385f));
 
             var summon = MakeButton(canvas.transform, "SummonButton", "SUMMON (300)",
-                new Vector2(0.06f, 0.205f), new Vector2(0.48f, 0.28f),
+                new Vector2(0.06f, 0.19f), new Vector2(0.48f, 0.265f),
                 new Color(0.45f, 0.30f, 0.65f));
 
             var summon10 = MakeButton(canvas.transform, "Summon10Button", "SUMMON x10",
-                new Vector2(0.52f, 0.205f), new Vector2(0.94f, 0.28f),
+                new Vector2(0.52f, 0.19f), new Vector2(0.94f, 0.265f),
                 new Color(0.35f, 0.24f, 0.55f));
-
-            var battle = MakeButton(canvas.transform, "BattleButton", "BATTLE",
-                new Vector2(0.18f, 0.10f), new Vector2(0.82f, 0.18f),
-                new Color(0.20f, 0.42f, 0.60f));
 
             var reset = MakeButton(canvas.transform, "ResetButton", "Reset",
                 new Vector2(0.72f, 0.02f), new Vector2(0.97f, 0.07f),
@@ -68,19 +72,21 @@ namespace RPG.EditorTools
 
             // ── Wire controller ───────────────────────────────────────────
             var ctrlGO = new GameObject("HomeController");
-            var ctrl   = ctrlGO.AddComponent<global::UI.HomeController>();
-            var pool   = AssetDatabase.LoadAssetAtPath<Data.GachaPool>(PoolPath);
+            var ctrl     = ctrlGO.AddComponent<global::UI.HomeController>();
+            var pool     = AssetDatabase.LoadAssetAtPath<Data.GachaPool>(PoolPath);
+            var campaign = AssetDatabase.LoadAssetAtPath<Data.CampaignData>(CampaignPath);
 
             var so = new SerializedObject(ctrl);
-            if (pool != null) so.FindProperty("_pool").objectReferenceValue = pool;
+            if (pool != null)     so.FindProperty("_pool").objectReferenceValue     = pool;
+            if (campaign != null) so.FindProperty("_campaign").objectReferenceValue = campaign;
             so.FindProperty("_gemsLabel").objectReferenceValue      = gems;
             so.FindProperty("_teamLabel").objectReferenceValue      = team;
             so.FindProperty("_resultLabel").objectReferenceValue    = result;
             so.FindProperty("_summonButton").objectReferenceValue   = summon;
             so.FindProperty("_summon10Button").objectReferenceValue = summon10;
-            so.FindProperty("_battleButton").objectReferenceValue   = battle;
             so.FindProperty("_resetButton").objectReferenceValue    = reset;
             so.FindProperty("_gridContainer").objectReferenceValue  = grid;
+            so.FindProperty("_stageContainer").objectReferenceValue = stages;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             EditorSceneManager.MarkSceneDirty(scene);

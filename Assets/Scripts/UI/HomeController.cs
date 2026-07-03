@@ -14,20 +14,20 @@ namespace UI
         private const int TeamSize = 4;
 
         [SerializeField] private GachaPool     _pool;
+        [SerializeField] private CampaignData  _campaign;
         [SerializeField] private Text          _gemsLabel;
         [SerializeField] private Text          _teamLabel;
         [SerializeField] private Text          _resultLabel;
         [SerializeField] private Button        _summonButton;
         [SerializeField] private Button        _summon10Button;
-        [SerializeField] private Button        _battleButton;
         [SerializeField] private Button        _resetButton;
         [SerializeField] private RectTransform _gridContainer;
+        [SerializeField] private RectTransform _stageContainer;
 
         private void Start()
         {
             _summonButton?.onClick.AddListener(OnSummon);
             _summon10Button?.onClick.AddListener(OnSummon10);
-            _battleButton?.onClick.AddListener(() => SceneManager.LoadScene("Combat"));
             _resetButton?.onClick.AddListener(OnReset);
 
             if (_resultLabel) _resultLabel.text = "";
@@ -97,6 +97,60 @@ namespace UI
             if (_summon10Button) _summon10Button.interactable = p.gems >= cost;
 
             BuildGrid(p);
+            BuildStages(p);
+        }
+
+        // ── Campaign stages ─────────────────────────────────────────────────
+
+        private void BuildStages(PlayerProfile p)
+        {
+            if (_stageContainer == null || _campaign == null || _campaign.stages == null) return;
+            for (int i = _stageContainer.childCount - 1; i >= 0; i--)
+                Destroy(_stageContainer.GetChild(i).gameObject);
+
+            int n = _campaign.stages.Length;
+            if (n == 0) return;
+
+            const float gap = 0.02f;
+            float w = (1f - gap * (n - 1)) / n;
+            for (int i = 0; i < n; i++)
+            {
+                float xMin = i * (w + gap);
+                MakeStageButton(i, _campaign.stages[i], p.campaignProgress,
+                    new Vector2(xMin, 0f), new Vector2(xMin + w, 1f));
+            }
+        }
+
+        private void MakeStageButton(int index, CampaignStage stage, int progress, Vector2 aMin, Vector2 aMax)
+        {
+            bool locked  = index > progress;
+            bool cleared = index < progress;
+
+            var go = new GameObject($"Stage_{index}");
+            go.transform.SetParent(_stageContainer, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = aMin; rt.anchorMax = aMax; rt.offsetMin = rt.offsetMax = Vector2.zero;
+
+            var img = go.AddComponent<Image>();
+            img.color = locked ? new Color(0.15f, 0.15f, 0.18f, 0.90f)
+                               : new Color(0.20f, 0.42f, 0.60f, 0.95f);
+
+            var btn = go.AddComponent<Button>();
+            btn.interactable = !locked;
+            int captured = index;
+            btn.onClick.AddListener(() => LoadStage(captured));
+
+            var txt = MakeCellText(go.transform);
+            txt.alignment = TextAnchor.MiddleCenter;
+            string line2 = locked ? "Locked" : (cleared ? $"✓ +{stage.gemReward}" : $"+{stage.gemReward}");
+            txt.text  = $"Stage {index + 1}\n{line2}";
+            txt.color = locked ? new Color(0.6f, 0.6f, 0.65f) : Color.white;
+        }
+
+        private void LoadStage(int index)
+        {
+            CampaignState.SelectedStage = index;
+            SceneManager.LoadScene("Combat");
         }
 
         private void BuildGrid(PlayerProfile p)

@@ -18,6 +18,7 @@ namespace Combat
         [SerializeField] private Transform      _statusContainer;
         [SerializeField] private RectTransform  _hpFill;
         [SerializeField] private Text           _hpLabel;
+        [SerializeField] private Text           _nameLabel;
 
         private Image         _image;
         private RectTransform _rt;
@@ -86,6 +87,7 @@ namespace Combat
             _canvasOriginalPos   = _canvasRT != null ? _canvasRT.anchoredPosition : Vector2.zero;
             if (_turnMeterFill != null) _turnMeterFill.anchorMax = new Vector2(0f, 1f);
             if (_targetHighlight != null) _targetHighlight.enabled = false;
+            if (_nameLabel != null) _nameLabel.text = _trackedUnit.Name.ToUpper();
             RefreshHP();
             RefreshStatusIcons();
         }

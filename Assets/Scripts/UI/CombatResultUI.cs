@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using Core;
 using Combat;
+using Data;
 
 namespace UI
 {
@@ -11,10 +12,11 @@ namespace UI
     // the visual panel it toggles starts hidden.
     public class CombatResultUI : MonoBehaviour
     {
-        [SerializeField] private GameObject _panel;
-        [SerializeField] private Text       _outcomeLabel;
-        [SerializeField] private Text       _rewardLabel;
-        [SerializeField] private Button     _continueButton;
+        [SerializeField] private GameObject   _panel;
+        [SerializeField] private Text         _outcomeLabel;
+        [SerializeField] private Text         _rewardLabel;
+        [SerializeField] private Button       _continueButton;
+        [SerializeField] private CampaignData _campaign;
 
         private void Awake()
         {
@@ -39,7 +41,7 @@ namespace UI
             if (_rewardLabel)
             {
                 _rewardLabel.text = evt.Victory
-                    ? $"+{RewardService.GrantVictory()} Gems"
+                    ? $"+{CampaignService.GrantStageVictory(_campaign, CampaignState.SelectedStage)} Gems"
                     : "No reward — try again!";
             }
         }

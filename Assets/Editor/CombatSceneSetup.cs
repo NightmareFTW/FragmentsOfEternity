@@ -19,14 +19,18 @@ namespace RPG.EditorTools
             foreach (var go in scene.GetRootGameObjects())
                 Object.DestroyImmediate(go);
 
-            // Load the starter encounter (created via RPG → Create Starter Content).
-            // When absent, panels + controller fall back to a built-in 1v1.
-            var encounter = AssetDatabase.LoadAssetAtPath<Data.EncounterData>(
-                "Assets/ScriptableObjects/Encounters/IntroSkirmish.asset");
+            // Load the campaign (created via RPG → Create Starter Content). Panels
+            // size to stage 1's encounter; the actual stage is resolved at runtime.
+            var campaign  = AssetDatabase.LoadAssetAtPath<Data.CampaignData>(
+                "Assets/ScriptableObjects/Campaign.asset");
+            var encounter = (campaign != null && campaign.stages != null && campaign.stages.Length > 0)
+                ? campaign.stages[0].encounter
+                : AssetDatabase.LoadAssetAtPath<Data.EncounterData>(
+                    "Assets/ScriptableObjects/Encounters/Stage1.asset");
 
             BuildCamera();
             BuildEventSystem();
-            BuildCombatController(encounter);
+            BuildCombatController(encounter, campaign);
 
             var canvas = BuildCanvas();
 
@@ -49,7 +53,7 @@ namespace RPG.EditorTools
             WireTooltip(hud, tooltip);
 
             // End-of-battle result overlay renders above even the tooltip.
-            BuildResultPanel(canvas.transform);
+            BuildResultPanel(canvas.transform, campaign);
 
             EditorSceneManager.MarkSceneDirty(scene);
             bool saved = EditorSceneManager.SaveScene(scene, ScenePath);
@@ -86,24 +90,21 @@ namespace RPG.EditorTools
             go.AddComponent<StandaloneInputModule>();
         }
 
-        static void BuildCombatController(Data.EncounterData encounter)
+        static void BuildCombatController(Data.EncounterData encounter, Data.CampaignData campaign)
         {
             var go         = new GameObject("CombatController");
             var controller = go.AddComponent<Combat.CombatController>();
 
-            // Wire the encounter and the gacha pool (used to resolve the player's
-            // saved team ids into HeroData). Both are optional — CombatController
-            // falls back to the encounter allies or a built-in duel.
+            // Wire the fallback encounter, the campaign (selected stage wins), and
+            // the gacha pool (resolves the player's saved team ids into HeroData).
             var pool = AssetDatabase.LoadAssetAtPath<Data.GachaPool>(
                 "Assets/ScriptableObjects/GachaPool.asset");
 
-            if (encounter != null || pool != null)
-            {
-                var so = new SerializedObject(controller);
-                if (encounter != null) so.FindProperty("_encounter").objectReferenceValue = encounter;
-                if (pool != null)      so.FindProperty("_heroPool").objectReferenceValue   = pool;
-                so.ApplyModifiedPropertiesWithoutUndo();
-            }
+            var so = new SerializedObject(controller);
+            if (encounter != null) so.FindProperty("_encounter").objectReferenceValue = encounter;
+            if (campaign  != null) so.FindProperty("_campaign").objectReferenceValue   = campaign;
+            if (pool      != null) so.FindProperty("_heroPool").objectReferenceValue   = pool;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         static GameObject BuildCanvas()
@@ -382,6 +383,7 @@ namespace RPG.EditorTools
             so.FindProperty("_statusContainer").objectReferenceValue   = statusContainer;
             so.FindProperty("_hpFill").objectReferenceValue            = hpFill;
             so.FindProperty("_hpLabel").objectReferenceValue           = hpText;
+            so.FindProperty("_nameLabel").objectReferenceValue         = lbl;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             return visual;
@@ -784,7 +786,7 @@ namespace RPG.EditorTools
 
         // ── Result overlay ─────────────────────────────────────────────────
 
-        static void BuildResultPanel(Transform canvasTransform)
+        static void BuildResultPanel(Transform canvasTransform, Data.CampaignData campaign)
         {
             // Controller sits on an always-active object so it hears CombatEndEvent.
             var ctrlGO = new GameObject("CombatResult");
@@ -815,6 +817,7 @@ namespace RPG.EditorTools
             so.FindProperty("_outcomeLabel").objectReferenceValue   = outcome;
             so.FindProperty("_rewardLabel").objectReferenceValue    = reward;
             so.FindProperty("_continueButton").objectReferenceValue = cont;
+            if (campaign != null) so.FindProperty("_campaign").objectReferenceValue = campaign;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             panel.SetActive(false);

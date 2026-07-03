@@ -93,21 +93,27 @@ namespace RPG.EditorTools
                 hpGrowth: 34f, atkGrowth: 9f, defGrowth: 3f,
                 slash, null, null);
 
-            // ── Encounter ─────────────────────────────────────────────────
-            MakeEncounter("Intro Skirmish", "intro_skirmish",
-                new[] { hero, knight, mage, cleric },
-                new[] { goblin, grunt, orc, wolf },
-                allyLevel: 1, enemyLevel: 1);
+            // ── Stage encounters (same roster, rising enemy level) ────────
+            var allyRoster  = new[] { hero, knight, mage, cleric };
+            var enemyRoster = new[] { goblin, grunt, orc, wolf };
+            var s1 = MakeEncounter("Stage 1", "stage_1", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 1);
+            var s2 = MakeEncounter("Stage 2", "stage_2", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 4);
+            var s3 = MakeEncounter("Stage 3", "stage_3", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 7);
+
+            // ── Campaign (rewards rise with difficulty) ───────────────────
+            MakeCampaign(
+                ("Stage 1 — Skirmish", s1, 150),
+                ("Stage 2 — Warband",  s2, 250),
+                ("Stage 3 — Warlord",  s3, 400));
 
             // ── Gacha pool (the four summonable heroes) ───────────────────
             MakeGachaPool(new[] { hero, knight, mage, cleric }, summonCost: 300);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[RPG] Starter content created: 6 skills, 8 heroes, the " +
-                      "'Intro Skirmish' 4v4 encounter, and a GachaPool in " +
-                      "Assets/ScriptableObjects/. Now run RPG → Setup Combat Scene " +
-                      "and RPG → Setup Home Scene.");
+            Debug.Log("[RPG] Starter content created: 6 skills, 8 heroes, a 3-stage " +
+                      "campaign, and a GachaPool in Assets/ScriptableObjects/. Now run " +
+                      "RPG → Setup Combat Scene and RPG → Setup Home Scene.");
         }
 
         [MenuItem("RPG/Create Starter Content", validate = true)]
@@ -180,7 +186,7 @@ namespace RPG.EditorTools
             EditorUtility.SetDirty(gp);
         }
 
-        static void MakeEncounter(
+        static EncounterData MakeEncounter(
             string name, string id, HeroData[] allies, HeroData[] enemies,
             int allyLevel, int enemyLevel)
         {
@@ -194,6 +200,22 @@ namespace RPG.EditorTools
             ed.enemyLevel    = enemyLevel;
 
             EditorUtility.SetDirty(ed);
+            return ed;
+        }
+
+        static void MakeCampaign(params (string stageName, EncounterData enc, int reward)[] stages)
+        {
+            var cd   = LoadOrCreate<CampaignData>("Assets/ScriptableObjects/Campaign.asset");
+            var list = new CampaignStage[stages.Length];
+            for (int i = 0; i < stages.Length; i++)
+                list[i] = new CampaignStage
+                {
+                    stageName = stages[i].stageName,
+                    encounter = stages[i].enc,
+                    gemReward = stages[i].reward
+                };
+            cd.stages = list;
+            EditorUtility.SetDirty(cd);
         }
 
         static StatusEffectEntry Effect(StatusEffectType type, int duration, int value) =>

@@ -7,8 +7,11 @@ namespace Combat
 {
     public class CombatController : MonoBehaviour
     {
-        [Header("Encounter (optional — falls back to a built-in duel if empty)")]
+        [Header("Encounter (fallback when no campaign stage is selected)")]
         [SerializeField] private EncounterData _encounter;
+
+        [Header("Campaign — the selected stage's encounter wins if set")]
+        [SerializeField] private CampaignData _campaign;
 
         [Header("Roster resolver — maps the player's saved team ids to HeroData")]
         [SerializeField] private GachaPool _heroPool;
@@ -21,17 +24,19 @@ namespace Combat
             EventBus.Subscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Subscribe<SkillSelectedEvent>(OnSkillSelected);
 
+            var encounter = ResolveEncounter();
+
             // Enemies always come from the encounter (or the built-in fallback).
-            List<Unit> enemies = (_encounter != null && _encounter.enemies != null && _encounter.enemies.Length > 0)
-                ? BuildTeam(_encounter.enemies, _encounter.enemyLevel)
+            List<Unit> enemies = (encounter != null && encounter.enemies != null && encounter.enemies.Length > 0)
+                ? BuildTeam(encounter.enemies, encounter.enemyLevel)
                 : DefaultEnemies();
 
             // Allies: the player's chosen roster if they have one, else the
             // encounter's fixed allies, else a built-in starter.
-            List<Unit> allies = BuildPlayerTeam();
+            List<Unit> allies = BuildPlayerTeam(encounter);
             if (allies == null || allies.Count == 0)
-                allies = (_encounter != null && _encounter.allies != null && _encounter.allies.Length > 0)
-                    ? BuildTeam(_encounter.allies, _encounter.allyLevel)
+                allies = (encounter != null && encounter.allies != null && encounter.allies.Length > 0)
+                    ? BuildTeam(encounter.allies, encounter.allyLevel)
                     : DefaultAllies();
 
             _battle = gameObject.AddComponent<BattleManager>();
@@ -40,16 +45,28 @@ namespace Combat
 
         // ── Team construction ───────────────────────────────────────────────
 
+        // The campaign's selected-stage encounter wins; else the wired fallback.
+        private EncounterData ResolveEncounter()
+        {
+            if (_campaign != null && _campaign.stages != null)
+            {
+                int i = CampaignState.SelectedStage;
+                if (i >= 0 && i < _campaign.stages.Length && _campaign.stages[i].encounter != null)
+                    return _campaign.stages[i].encounter;
+            }
+            return _encounter;
+        }
+
         // The player's saved team, resolved from the gacha pool. Null when there
         // is no pool wired or no team picked yet.
-        private List<Unit> BuildPlayerTeam()
+        private List<Unit> BuildPlayerTeam(EncounterData encounter)
         {
             if (_heroPool == null || _heroPool.heroes == null) return null;
 
             var ids = SaveSystem.Profile.teamHeroIds;
             if (ids == null || ids.Count == 0) return null;
 
-            int level = _encounter != null ? _encounter.allyLevel : 1;
+            int level = encounter != null ? encounter.allyLevel : 1;
             var units = new List<Unit>();
             foreach (var id in ids)
             {

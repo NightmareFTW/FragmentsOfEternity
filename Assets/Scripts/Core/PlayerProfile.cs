@@ -16,5 +16,8 @@ namespace Core
 
         // Pulls since the last 5★ — drives the pity guarantee.
         public int pityCounter;
+
+        // Number of campaign stages cleared; stage i is unlocked when this >= i.
+        public int campaignProgress;
     }
 }
