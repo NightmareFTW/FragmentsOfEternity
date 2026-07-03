@@ -213,7 +213,7 @@ namespace Combat
             }
             _lastShowHitTime = Time.unscaledTime;
 
-            PlayHitSFX();
+            AudioManager.Instance.Play(damage <= 0 ? Sfx.Block : (isCrit ? Sfx.Crit : Sfx.Hit));
             StartCoroutine(HitStop());
             if (_canvasRoot)
             {
@@ -544,9 +544,8 @@ namespace Combat
 
         // ── SFX hooks (stubs — wire real AudioSource here later) ──────────
 
-        private void PlayAttackSFX() { }
-        private void PlayHitSFX()    { }
-        private void PlayHealSFX()   { }
+        private void PlayAttackSFX() => AudioManager.Instance.Play(Sfx.Attack);
+        private void PlayHealSFX()   => AudioManager.Instance.Play(Sfx.Heal);
 
         // ── Skill VFX dispatcher ─────────────────────────────────────────
         // Null skill = enemy attack with no skill → fall back to generic impact.

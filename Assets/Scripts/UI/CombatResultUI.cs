@@ -30,6 +30,7 @@ namespace UI
         private void OnCombatEnd(CombatEndEvent evt)
         {
             if (_panel) _panel.SetActive(true);
+            AudioManager.Instance.Play(evt.Victory ? Sfx.Victory : Sfx.Defeat);
 
             if (_outcomeLabel)
             {

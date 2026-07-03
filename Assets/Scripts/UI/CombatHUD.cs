@@ -204,6 +204,7 @@ namespace UI
             _inputLocked = true;
             _tooltip?.Hide();
             SetAllButtonsInteractable(false);
+            AudioManager.Instance.Play(Sfx.Click);
 
             EventBus.Raise(new SkillSelectedEvent { SkillSlot = slot });
         }

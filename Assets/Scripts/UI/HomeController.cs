@@ -61,6 +61,7 @@ namespace UI
 
         private void OnSummon()
         {
+            AudioManager.Instance.Play(Sfx.Click);
             var result = GachaService.Summon(_pool);
             if (_resultLabel)
             {
@@ -77,6 +78,7 @@ namespace UI
 
         private void OnSummon10()
         {
+            AudioManager.Instance.Play(Sfx.Click);
             var results = GachaService.SummonMany(_pool, 10);
             if (results.Count == 1 && !results[0].Success)
             {
@@ -172,6 +174,7 @@ namespace UI
 
         private void LoadStage(int index)
         {
+            AudioManager.Instance.Play(Sfx.Click);
             CampaignState.SelectedStage = index;
             SceneManager.LoadScene("Combat");
         }
@@ -231,6 +234,7 @@ namespace UI
 
         private void OpenDetail(string id)
         {
+            AudioManager.Instance.Play(Sfx.Click);
             _detailHeroId = id;
             FillDetail();
             if (_detailPanel) _detailPanel.SetActive(true);
