@@ -44,9 +44,10 @@ namespace RPG.EditorTools
 
             var hud = BuildHUD(canvas.transform,
                 out var turnLabel,
-                out var s1, out var s2, out var s3);
+                out var s1, out var s2, out var s3,
+                out var auto, out var speed);
 
-            WireHUD(hud, turnLabel, s1, s2, s3);
+            WireHUD(hud, turnLabel, s1, s2, s3, auto, speed);
 
             // Tooltip must be the last canvas child so it renders on top of everything.
             var tooltip = BuildTooltip(canvas.transform);
@@ -690,7 +691,8 @@ namespace RPG.EditorTools
         static global::UI.CombatHUD BuildHUD(
             Transform parent,
             out Text   turnLabel,
-            out Button s1, out Button s2, out Button s3)
+            out Button s1, out Button s2, out Button s3,
+            out Button auto, out Button speed)
         {
             var hudGO = new GameObject("CombatHUD");
             hudGO.transform.SetParent(parent, false);
@@ -711,19 +713,28 @@ namespace RPG.EditorTools
             s3 = MakeSkillButton(hudGO.transform, "Skill3Button", "Skill 3",
                 new Vector2(0.66f, 0.04f), new Vector2(0.96f, 0.14f));
 
+            // Battle controls (top-right band, between the enemy row and title).
+            auto = MakeSkillButton(hudGO.transform, "AutoButton", "Auto: OFF",
+                new Vector2(0.58f, 0.79f), new Vector2(0.78f, 0.85f));
+            speed = MakeSkillButton(hudGO.transform, "SpeedButton", "1x",
+                new Vector2(0.79f, 0.79f), new Vector2(0.99f, 0.85f));
+
             return hud;
         }
 
         static void WireHUD(
             global::UI.CombatHUD hud,
             Text turnLabel,
-            Button s1, Button s2, Button s3)
+            Button s1, Button s2, Button s3,
+            Button auto, Button speed)
         {
             var so = new SerializedObject(hud);
             so.FindProperty("_turnLabel").objectReferenceValue      = turnLabel;
             so.FindProperty("_skill1Button").objectReferenceValue   = s1;
             so.FindProperty("_skill2Button").objectReferenceValue   = s2;
             so.FindProperty("_skill3Button").objectReferenceValue   = s3;
+            so.FindProperty("_autoButton").objectReferenceValue     = auto;
+            so.FindProperty("_speedButton").objectReferenceValue    = speed;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

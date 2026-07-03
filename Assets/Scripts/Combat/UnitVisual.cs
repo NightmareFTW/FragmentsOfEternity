@@ -502,7 +502,7 @@ namespace Combat
         {
             Time.timeScale = 0.05f;
             yield return new WaitForSecondsRealtime(0.04f);
-            Time.timeScale = 1f;
+            Time.timeScale = CombatSettings.Speed;   // restore to the chosen battle speed
         }
 
         // ── Screen flash ─────────────────────────────────────────────────

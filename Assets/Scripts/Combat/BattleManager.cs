@@ -162,6 +162,39 @@ namespace Combat
             EndTurn();
         }
 
+        // Auto-battle: after a beat, pick a skill for the waiting ally.
+        private IEnumerator AutoResolve(Unit ally)
+        {
+            yield return new WaitForSeconds(0.35f);
+            if (_combatOver || !_awaitingInput || _activeAlly != ally) yield break;
+
+            int slot = AutoPickSlot(ally);
+            if (slot >= 0)
+            {
+                UseSkill(slot);
+            }
+            else
+            {
+                // Everything is on cooldown → a plain basic attack.
+                _awaitingInput = false;
+                BasicAttack(ally);
+                StartCoroutine(EndTurnDelayed());
+            }
+        }
+
+        // Prefer a ready damage skill; otherwise the first ready skill.
+        private static int AutoPickSlot(Unit ally)
+        {
+            int fallback = -1;
+            for (int i = 0; i < ally.Skills.Length; i++)
+            {
+                if (ally.Skills[i] == null || !ally.IsSkillReady(i)) continue;
+                if (ally.Skills[i].skillType == SkillType.Damage) return i;
+                if (fallback < 0) fallback = i;
+            }
+            return fallback;
+        }
+
         // ── Tick loop ───────────────────────────────────────────────────────
 
         private IEnumerator TickLoop()
@@ -239,6 +272,7 @@ namespace Combat
                     _currentTarget = FirstAlive(_enemies);
                     EventBus.Raise(new TargetChangedEvent { Target = _currentTarget });
                     _awaitingInput = true;
+                    if (CombatSettings.Auto) StartCoroutine(AutoResolve(actor));
                 }
             }
         }
@@ -421,4 +455,12 @@ namespace Combat
     public struct UnitResistedEvent          { public Unit Target; }
     public struct SkillCooldownsChangedEvent  { public Unit Owner; public SkillData[] Skills; public int[] Cooldowns; public bool Silenced; }
     public struct StatusEffectAppliedEvent    { public Unit Target; }
+
+    // Combat QoL that persists across battles in a session; Time.timeScale is
+    // driven from Speed while a battle is running.
+    public static class CombatSettings
+    {
+        public static bool  Auto;
+        public static float Speed = 1f;
+    }
 }

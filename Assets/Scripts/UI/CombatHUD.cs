@@ -17,6 +17,10 @@ namespace UI
         [SerializeField] private Button _skill2Button;
         [SerializeField] private Button _skill3Button;
 
+        [Header("Battle Controls")]
+        [SerializeField] private Button _autoButton;
+        [SerializeField] private Button _speedButton;
+
         [Header("Tooltip")]
         [SerializeField] private TooltipUI _tooltip;
 
@@ -42,7 +46,32 @@ namespace UI
             AddTooltipTriggers(_skill1Button, 0);
             AddTooltipTriggers(_skill2Button, 1);
             AddTooltipTriggers(_skill3Button, 2);
+
+            _autoButton?.onClick.AddListener(OnAutoPressed);
+            _speedButton?.onClick.AddListener(OnSpeedPressed);
+            UpdateAutoLabel();
+            UpdateSpeedLabel();
         }
+
+        // ── Battle controls (auto + speed) ─────────────────────────────────
+
+        private void OnAutoPressed()
+        {
+            CombatSettings.Auto = !CombatSettings.Auto;
+            AudioManager.Instance.Play(Sfx.Click);
+            UpdateAutoLabel();
+        }
+
+        private void OnSpeedPressed()
+        {
+            CombatSettings.Speed = CombatSettings.Speed >= 3f ? 1f : CombatSettings.Speed + 1f;
+            Time.timeScale = CombatSettings.Speed;
+            AudioManager.Instance.Play(Sfx.Click);
+            UpdateSpeedLabel();
+        }
+
+        private void UpdateAutoLabel()  => SetButtonLabel(_autoButton, CombatSettings.Auto ? "Auto: ON" : "Auto: OFF");
+        private void UpdateSpeedLabel() => SetButtonLabel(_speedButton, $"{Mathf.RoundToInt(CombatSettings.Speed)}x");
 
         private void OnDestroy()
         {

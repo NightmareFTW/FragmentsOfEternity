@@ -21,6 +21,7 @@ namespace Combat
         private void Start()
         {
             GameManager.Instance?.SetState(GameState.Combat);
+            Time.timeScale = CombatSettings.Speed;   // apply the chosen battle speed
             EventBus.Subscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Subscribe<SkillSelectedEvent>(OnSkillSelected);
 
@@ -141,6 +142,7 @@ namespace Combat
 
         private void OnDestroy()
         {
+            Time.timeScale = 1f;   // never leave the hub running fast
             EventBus.Unsubscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Unsubscribe<SkillSelectedEvent>(OnSkillSelected);
         }
