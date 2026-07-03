@@ -24,11 +24,29 @@ namespace UI
         [SerializeField] private RectTransform _gridContainer;
         [SerializeField] private RectTransform _stageContainer;
 
+        [Header("Hero detail overlay")]
+        [SerializeField] private GameObject _detailPanel;
+        [SerializeField] private Text       _detailName;
+        [SerializeField] private Text       _detailSubtitle;
+        [SerializeField] private Text       _detailLevel;
+        [SerializeField] private Text       _detailStats;
+        [SerializeField] private Text       _detailSkills;
+        [SerializeField] private Button     _detailLevelUpButton;
+        [SerializeField] private Button     _detailTeamButton;
+        [SerializeField] private Button     _detailCloseButton;
+
+        private string _detailHeroId;
+
         private void Start()
         {
             _summonButton?.onClick.AddListener(OnSummon);
             _summon10Button?.onClick.AddListener(OnSummon10);
             _resetButton?.onClick.AddListener(OnReset);
+
+            _detailLevelUpButton?.onClick.AddListener(OnDetailLevelUp);
+            _detailTeamButton?.onClick.AddListener(OnDetailTeamToggle);
+            _detailCloseButton?.onClick.AddListener(CloseDetail);
+            if (_detailPanel) _detailPanel.SetActive(false);
 
             if (_resultLabel) _resultLabel.text = "";
             RebuildAll();
@@ -204,6 +222,86 @@ namespace UI
             RebuildAll();
         }
 
+        // ── Hero detail overlay ─────────────────────────────────────────────
+
+        private void OpenDetail(string id)
+        {
+            _detailHeroId = id;
+            FillDetail();
+            if (_detailPanel) _detailPanel.SetActive(true);
+        }
+
+        private void CloseDetail()
+        {
+            if (_detailPanel) _detailPanel.SetActive(false);
+        }
+
+        private void OnDetailLevelUp()
+        {
+            if (ProgressionService.LevelUp(_detailHeroId) < 0)
+                SetError("Can't level up — max level or not enough gems.");
+            FillDetail();
+            RebuildAll();
+        }
+
+        private void OnDetailTeamToggle()
+        {
+            ToggleTeam(_detailHeroId);
+            FillDetail();
+        }
+
+        private void FillDetail()
+        {
+            var hero = HeroById(_detailHeroId);
+            if (hero == null) return;
+
+            var  p      = SaveSystem.Profile;
+            int  level  = ProgressionService.GetLevel(_detailHeroId);
+            bool inTeam = p.teamHeroIds.Contains(_detailHeroId);
+
+            if (_detailName)     { _detailName.text = hero.heroName; _detailName.color = RarityColor(hero.rarity); }
+            if (_detailSubtitle) _detailSubtitle.text = $"{Stars(hero.rarity)}    {hero.element}    {hero.heroClass}";
+            if (_detailLevel)    _detailLevel.text = $"Level {level} / {ProgressionService.MaxLevel}";
+
+            if (_detailStats)
+            {
+                int hp  = Mathf.RoundToInt(hero.baseHP  + hero.hpGrowth  * (level - 1));
+                int atk = Mathf.RoundToInt(hero.baseATK + hero.atkGrowth * (level - 1));
+                int def = Mathf.RoundToInt(hero.baseDEF + hero.defGrowth * (level - 1));
+                _detailStats.text =
+                    $"HP    {hp}\n" +
+                    $"ATK   {atk}\n" +
+                    $"DEF   {def}\n" +
+                    $"SPD   {hero.baseSPD}\n" +
+                    $"CRIT  {Mathf.RoundToInt(hero.baseCritRate * 100)}%  x{hero.baseCritDamage:0.0}\n" +
+                    $"RES   {Mathf.RoundToInt(hero.baseResistance * 100)}%";
+            }
+
+            if (_detailSkills)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var s in hero.Skills())
+                    if (s != null) sb.AppendLine($"<b>{s.skillName}</b>  {s.description}");
+                _detailSkills.text = sb.ToString();
+            }
+
+            if (_detailTeamButton) SetButtonLabel(_detailTeamButton, inTeam ? "Remove from Team" : "Add to Team");
+            if (_detailLevelUpButton)
+            {
+                bool max  = level >= ProgressionService.MaxLevel;
+                int  cost = ProgressionService.CostToLevel(level);
+                _detailLevelUpButton.interactable = !max && p.gems >= cost;
+                SetButtonLabel(_detailLevelUpButton, max ? "MAX LEVEL" : $"Level Up  ({cost}g)");
+            }
+        }
+
+        private static void SetButtonLabel(Button btn, string label)
+        {
+            if (btn == null) return;
+            var txt = btn.GetComponentInChildren<Text>();
+            if (txt) txt.text = label;
+        }
+
         // ── Cell / label construction ───────────────────────────────────────
 
         private void MakeHeroCell(string id, HeroData hero, int count, bool inTeam,
@@ -223,7 +321,7 @@ namespace UI
                                : new Color(0.12f, 0.12f, 0.18f, 0.95f);
 
             var btn = go.AddComponent<Button>();
-            btn.onClick.AddListener(() => ToggleTeam(id));
+            btn.onClick.AddListener(() => OpenDetail(id));
 
             if (inTeam)
             {
@@ -234,46 +332,11 @@ namespace UI
 
             int level = ProgressionService.GetLevel(id);
 
-            // Main label (tap toggles team) on the left; a level-up button on the right.
-            var txt = MakeCellText(go.transform, new Vector2(0f, 0f), new Vector2(0.72f, 1f));
-            string check = inTeam ? "[✓] " : "";
-            txt.text  = $"{check}{name}  {Stars(rarity)}   Lv {level}   x{count}";
-            txt.color = inTeam ? Color.white : new Color(0.85f, 0.9f, 1f);
-
-            MakeLevelButton(go.transform, id, level, new Vector2(0.73f, 0.12f), new Vector2(0.99f, 0.88f));
-        }
-
-        private void MakeLevelButton(Transform parent, string id, int level, Vector2 aMin, Vector2 aMax)
-        {
-            bool max    = level >= ProgressionService.MaxLevel;
-            int  cost   = ProgressionService.CostToLevel(level);
-            bool afford = SaveSystem.Profile.gems >= cost;
-
-            var go = new GameObject("LevelUp");
-            go.transform.SetParent(parent, false);
-            var rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = aMin; rt.anchorMax = aMax; rt.offsetMin = rt.offsetMax = Vector2.zero;
-
-            var img = go.AddComponent<Image>();
-            img.color = (!max && afford) ? new Color(0.24f, 0.46f, 0.30f, 0.95f)
-                                         : new Color(0.20f, 0.20f, 0.22f, 0.90f);
-
-            var btn = go.AddComponent<Button>();
-            btn.interactable = !max && afford;
-            btn.onClick.AddListener(() => OnLevelUp(id));
-
+            // Whole cell opens the hero detail (team + leveling live there).
             var txt = MakeCellText(go.transform, Vector2.zero, Vector2.one);
-            txt.alignment = TextAnchor.MiddleCenter;
-            txt.fontSize  = 22;
-            txt.text  = max ? "MAX" : $"Lv+\n{cost}g";
-            txt.color = (!max && afford) ? Color.white : new Color(0.6f, 0.6f, 0.65f);
-        }
-
-        private void OnLevelUp(string id)
-        {
-            if (ProgressionService.LevelUp(id) < 0)
-                SetError("Can't level up — max level or not enough gems.");
-            RebuildAll();
+            string check = inTeam ? "[✓] " : "";
+            txt.text  = $"{check}{name}  {Stars(rarity)}   Lv {level}   x{count}   ›";
+            txt.color = inTeam ? Color.white : new Color(0.85f, 0.9f, 1f);
         }
 
         private void MakeGridLabel(string message)

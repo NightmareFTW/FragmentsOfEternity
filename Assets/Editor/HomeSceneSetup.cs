@@ -89,6 +89,9 @@ namespace RPG.EditorTools
             so.FindProperty("_stageContainer").objectReferenceValue = stages;
             so.ApplyModifiedPropertiesWithoutUndo();
 
+            // Hero detail overlay (built last so it renders on top; starts hidden).
+            BuildDetailPanel(canvas.transform, ctrl);
+
             EditorSceneManager.MarkSceneDirty(scene);
             bool saved = EditorSceneManager.SaveScene(scene, ScenePath);
             EnsureBuildScenes();
@@ -130,6 +133,70 @@ namespace RPG.EditorTools
 
         [MenuItem("RPG/Setup Home Scene", validate = true)]
         static bool Validate() => !EditorApplication.isPlaying;
+
+        // ── Hero detail overlay ─────────────────────────────────────────────
+
+        static void BuildDetailPanel(Transform canvas, global::UI.HomeController ctrl)
+        {
+            var root = MakeContainer(canvas, "HeroDetailPanel", Vector2.zero, Vector2.one);
+
+            // Dim backdrop (blocks input to the Home screen behind).
+            var dim = new GameObject("Dim");
+            dim.transform.SetParent(root, false);
+            var dimRT = dim.AddComponent<RectTransform>();
+            dimRT.anchorMin = Vector2.zero; dimRT.anchorMax = Vector2.one; dimRT.offsetMin = dimRT.offsetMax = Vector2.zero;
+            dim.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.82f);
+
+            // Card.
+            var card = new GameObject("Card");
+            card.transform.SetParent(root, false);
+            var cardRT = card.AddComponent<RectTransform>();
+            cardRT.anchorMin = new Vector2(0.07f, 0.15f); cardRT.anchorMax = new Vector2(0.93f, 0.85f);
+            cardRT.offsetMin = cardRT.offsetMax = Vector2.zero;
+            card.AddComponent<Image>().color = new Color(0.09f, 0.09f, 0.15f, 0.98f);
+            var t = card.transform;
+
+            var name = MakeText(t, "Name", "Hero",
+                new Vector2(0.05f, 0.88f), new Vector2(0.80f, 0.96f), 46, FontStyle.Bold, Color.white);
+            name.alignment = TextAnchor.MiddleLeft;
+
+            var sub = MakeText(t, "Subtitle", "",
+                new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.875f), 26, FontStyle.Bold, new Color(0.8f, 0.85f, 1f));
+            sub.alignment = TextAnchor.MiddleLeft;
+
+            var level = MakeText(t, "Level", "",
+                new Vector2(0.05f, 0.77f), new Vector2(0.95f, 0.82f), 28, FontStyle.Bold, new Color(1f, 0.85f, 0.4f));
+            level.alignment = TextAnchor.MiddleLeft;
+
+            var stats = MakeText(t, "Stats", "",
+                new Vector2(0.05f, 0.42f), new Vector2(0.50f, 0.76f), 26, FontStyle.Bold, new Color(0.85f, 0.9f, 1f));
+            stats.alignment = TextAnchor.UpperLeft;
+
+            var skills = MakeText(t, "Skills", "",
+                new Vector2(0.50f, 0.28f), new Vector2(0.97f, 0.76f), 20, FontStyle.Normal, new Color(0.85f, 0.9f, 1f));
+            skills.alignment = TextAnchor.UpperLeft;
+
+            var levelUp = MakeButton(t, "LevelUpBtn", "Level Up",
+                new Vector2(0.05f, 0.05f), new Vector2(0.48f, 0.14f), new Color(0.24f, 0.46f, 0.30f));
+            var team = MakeButton(t, "TeamBtn", "Add to Team",
+                new Vector2(0.52f, 0.05f), new Vector2(0.95f, 0.14f), new Color(0.45f, 0.30f, 0.65f));
+            var close = MakeButton(t, "CloseBtn", "X",
+                new Vector2(0.86f, 0.88f), new Vector2(0.98f, 0.97f), new Color(0.35f, 0.16f, 0.18f));
+
+            var so = new SerializedObject(ctrl);
+            so.FindProperty("_detailPanel").objectReferenceValue         = root.gameObject;
+            so.FindProperty("_detailName").objectReferenceValue          = name;
+            so.FindProperty("_detailSubtitle").objectReferenceValue      = sub;
+            so.FindProperty("_detailLevel").objectReferenceValue         = level;
+            so.FindProperty("_detailStats").objectReferenceValue         = stats;
+            so.FindProperty("_detailSkills").objectReferenceValue        = skills;
+            so.FindProperty("_detailLevelUpButton").objectReferenceValue = levelUp;
+            so.FindProperty("_detailTeamButton").objectReferenceValue    = team;
+            so.FindProperty("_detailCloseButton").objectReferenceValue   = close;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            root.gameObject.SetActive(false);
+        }
 
         // ── Scene objects ───────────────────────────────────────────────────
 
