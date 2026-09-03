@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -28,6 +29,7 @@ namespace Combat
         private Color         _originalColor;
         private Vector2       _originalAnchoredPos;
         private Vector2       _canvasOriginalPos;
+        private Vector3       _canvasOriginalScale = Vector3.one;
         private Vector3       _originalScale;
         private Unit          _trackedUnit;
         private bool          _combatOver;
@@ -37,6 +39,7 @@ namespace Combat
         private Coroutine     _attackCoroutine;
         private Coroutine     _hitCoroutine;
         private Coroutine     _shakeCoroutine;
+        private Coroutine     _punchCoroutine;
         private SkillData     _pendingSkillVFX;
         private float         _lastShowHitTime = -1f;
         private bool          _isDead;
@@ -63,6 +66,7 @@ namespace Combat
         {
             Time.timeScale = 1f;
             if (_canvasRT) _canvasRT.anchoredPosition = _canvasOriginalPos;
+            if (_canvasRT) _canvasRT.localScale = _canvasOriginalScale;
             EventBus.Unsubscribe<CombatInitEvent>(OnCombatInit);
             EventBus.Unsubscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Unsubscribe<TargetChangedEvent>(OnTargetChanged);
@@ -89,6 +93,7 @@ namespace Combat
             _idleEnabled         = true;
             _originalAnchoredPos = _rt != null ? _rt.anchoredPosition : Vector2.zero;
             _canvasOriginalPos   = _canvasRT != null ? _canvasRT.anchoredPosition : Vector2.zero;
+            _canvasOriginalScale = _canvasRT != null ? _canvasRT.localScale : Vector3.one;
             if (_turnMeterFill != null) _turnMeterFill.anchorMax = new Vector2(0f, 1f);
             if (_targetHighlight != null) _targetHighlight.enabled = false;
             if (_nameLabel != null) _nameLabel.text = $"{_trackedUnit.Name.ToUpper()}  ·  {_trackedUnit.Element}";
@@ -113,6 +118,7 @@ namespace Combat
             transform.localScale = _originalScale;
             if (_rt) _rt.anchoredPosition = _originalAnchoredPos;
             if (_canvasRT) _canvasRT.anchoredPosition = _canvasOriginalPos;
+            if (_canvasRT) _canvasRT.localScale = _canvasOriginalScale;
             if (_targetHighlight != null) _targetHighlight.enabled = false;
         }
 
@@ -139,7 +145,8 @@ namespace Combat
                 PlayAttackAnimation();
             else
             {
-                ShowHit(evt.Damage, evt.IsCrit, evt.Advantage);
+                Element? element = evt.Caster != null ? evt.Caster.Element : (Element?)null;
+                ShowHit(evt.Damage, evt.IsCrit, evt.Advantage, element);
                 RefreshHP();
             }
         }
@@ -212,7 +219,7 @@ namespace Combat
 
         // ── Public surface ────────────────────────────────────────────────
 
-        public void ShowHit(int damage, bool isCrit = false, int advantage = 0)
+        public void ShowHit(int damage, bool isCrit = false, int advantage = 0, Element? element = null)
         {
             string unitName = _trackedUnit?.Name ?? "?";
 
@@ -225,14 +232,25 @@ namespace Combat
             }
             _lastShowHitTime = Time.unscaledTime;
 
+            // A hit that drops the target to 0 HP gets an extended freeze — the
+            // "killing blow" beat every good ATB RPG leans on for weight.
+            bool isKillingBlow = damage > 0 && _trackedUnit != null && !_trackedUnit.IsAlive;
+            float stopDuration = isKillingBlow ? 0.16f : isCrit ? 0.08f : 0.04f;
+
             AudioManager.Instance.Play(damage <= 0 ? Sfx.Block : (isCrit ? Sfx.Crit : Sfx.Hit));
-            StartCoroutine(HitStop());
+            StartCoroutine(HitStop(stopDuration));
             if (_canvasRoot)
             {
                 if (_shakeCoroutine != null) StopCoroutine(_shakeCoroutine);
                 _shakeCoroutine = StartCoroutine(ScreenShake());
             }
-            if (_canvasRoot) StartCoroutine(SkillImpactVFX(_pendingSkillVFX));
+            if (_canvasRoot && (isCrit || isKillingBlow))
+            {
+                if (_punchCoroutine != null) StopCoroutine(_punchCoroutine);
+                _punchCoroutine = StartCoroutine(CanvasPunch(isKillingBlow ? 0.12f : 0.06f));
+            }
+            Color impactTint = element.HasValue ? ElementTint(element.Value) : new Color(1f, 0.96f, 0.65f);
+            if (_canvasRoot) StartCoroutine(SkillImpactVFX(_pendingSkillVFX, impactTint));
             _pendingSkillVFX = null;
             PlayHitReaction();
             if (_canvasRoot) StartCoroutine(ScreenFlashAnim());
@@ -498,11 +516,32 @@ namespace Combat
 
         // ── Hit-stop ──────────────────────────────────────────────────────
 
-        private IEnumerator HitStop()
+        private IEnumerator HitStop(float duration)
         {
             Time.timeScale = 0.05f;
-            yield return new WaitForSecondsRealtime(0.04f);
+            yield return new WaitForSecondsRealtime(duration);
             Time.timeScale = CombatSettings.Speed;   // restore to the chosen battle speed
+        }
+
+        // ── Canvas punch ──────────────────────────────────────────────────
+        // A brief whole-battlefield scale pulse layered on top of the position
+        // shake, reserved for crits and killing blows so it still reads as special.
+
+        private IEnumerator CanvasPunch(float intensity)
+        {
+            if (_canvasRT == null) yield break;
+            const float Dur = 0.18f;
+            float elapsed = 0f;
+            while (elapsed < Dur)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / Dur);
+                float s = 1f + intensity * Mathf.Sin(t * Mathf.PI);
+                _canvasRT.localScale = _canvasOriginalScale * s;
+                yield return null;
+            }
+            _canvasRT.localScale = _canvasOriginalScale;
+            _punchCoroutine = null;
         }
 
         // ── Screen flash ─────────────────────────────────────────────────
@@ -562,11 +601,11 @@ namespace Combat
         // ── Skill VFX dispatcher ─────────────────────────────────────────
         // Null skill = enemy attack with no skill → fall back to generic impact.
 
-        private IEnumerator SkillImpactVFX(SkillData skill)
+        private IEnumerator SkillImpactVFX(SkillData skill, Color tint)
         {
             if (skill == null)
             {
-                yield return StartCoroutine(ImpactEffectAnim());
+                yield return StartCoroutine(ImpactEffectAnim(tint));
                 yield break;
             }
             if (skill.skillName == "Slash")
@@ -579,7 +618,7 @@ namespace Combat
                 yield return StartCoroutine(HeavyBlowVFX());
                 yield break;
             }
-            yield return StartCoroutine(ImpactEffectAnim());
+            yield return StartCoroutine(ImpactEffectAnim(tint));
         }
 
         // Slash — three layered diagonal streaks across the target.
@@ -685,6 +724,8 @@ namespace Combat
             yield return StartCoroutine(HealRing(0.12f));
         }
 
+        private static readonly Color HealTint = new Color(0.35f, 1f, 0.45f);
+
         private IEnumerator HealRing(float delay)
         {
             if (delay > 0f) yield return new WaitForSeconds(delay);
@@ -692,15 +733,15 @@ namespace Combat
 
             var go = new GameObject("HealRing");
             go.transform.SetParent(_canvasRoot, false);
-            go.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
 
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin        = rt.anchorMax = _damageSpawnAnchor;
             rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta        = new Vector2(70f, 70f);
+            rt.sizeDelta        = new Vector2(90f, 90f);
 
             var img = go.AddComponent<Image>();
-            img.color = new Color(0.3f, 1f, 0.4f, 0f);
+            img.sprite = RadialGlowSprite(HealTint);
+            img.color  = new Color(1f, 1f, 1f, 0f);
 
             const float Dur = 0.45f;
             float elapsed = 0f;
@@ -710,7 +751,7 @@ namespace Combat
                 float t     = elapsed / Dur;
                 float scale = Mathf.Lerp(0.5f, 3.5f, t);
                 go.transform.localScale = new Vector3(scale, scale, 1f);
-                img.color = new Color(0.3f, 1f, 0.4f, 0.8f * Mathf.Pow(1f - t, 1.8f));
+                img.color = new Color(1f, 1f, 1f, 0.85f * Mathf.Pow(1f - t, 1.8f));
                 yield return null;
             }
 
@@ -718,35 +759,79 @@ namespace Combat
         }
 
         // ── Impact effect ─────────────────────────────────────────────────
+        // A soft radial burst tinted by the attacker's element (or a warm
+        // neutral cream when the caster/element is unknown).
 
-        private IEnumerator ImpactEffectAnim()
+        private IEnumerator ImpactEffectAnim(Color tint)
         {
             var go = new GameObject("Impact");
             go.transform.SetParent(_canvasRoot, false);
-            go.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
 
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin        = rt.anchorMax = _damageSpawnAnchor;
             rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta        = new Vector2(60f, 60f);
+            rt.sizeDelta        = new Vector2(90f, 90f);
 
             var img = go.AddComponent<Image>();
-            img.color = new Color(1f, 0.96f, 0.65f, 0f);
+            img.sprite = RadialGlowSprite(tint);
+            img.color  = new Color(1f, 1f, 1f, 0f);
+
             float elapsed   = 0f;
             const float Dur = 0.30f;
             while (elapsed < Dur)
             {
                 elapsed += Time.deltaTime;
                 float t     = elapsed / Dur;
-                float scale = Mathf.Sin(t * Mathf.PI) * 2.6f;
+                float scale = Mathf.Sin(t * Mathf.PI) * 2.2f;
                 go.transform.localScale = new Vector3(scale, scale, 1f);
                 float alpha = Mathf.Pow(1f - t, 2.5f);
-                img.color = new Color(1f, 0.96f, 0.65f, 0.90f * alpha);
+                img.color = new Color(1f, 1f, 1f, 0.95f * alpha);
                 yield return null;
             }
 
             Destroy(go);
         }
+
+        // ── Procedural glow sprites ─────────────────────────────────────────
+        // Cached soft radial-gradient sprites, generated once per tint and
+        // reused across every impact — no art assets, just a falloff texture.
+
+        private static readonly Dictionary<int, Sprite> _glowCache = new Dictionary<int, Sprite>();
+
+        private static Sprite RadialGlowSprite(Color tint)
+        {
+            int key = (Mathf.RoundToInt(tint.r * 255) << 16)
+                    | (Mathf.RoundToInt(tint.g * 255) << 8)
+                    |  Mathf.RoundToInt(tint.b * 255);
+            if (_glowCache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+            const int S = 64;
+            var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+            float c = (S - 1) * 0.5f, r = S * 0.5f;
+            for (int y = 0; y < S; y++)
+                for (int x = 0; x < S; x++)
+                {
+                    float d = Mathf.Clamp01(Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / r);
+                    float a = Mathf.Pow(1f - d, 2.2f);
+                    tex.SetPixel(x, y, new Color(tint.r, tint.g, tint.b, a));
+                }
+            tex.Apply();
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            var sprite = Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f), 100f);
+            _glowCache[key] = sprite;
+            return sprite;
+        }
+
+        private static Color ElementTint(Element e) => e switch
+        {
+            Element.Fire  => new Color(1.00f, 0.45f, 0.15f),
+            Element.Ice   => new Color(0.35f, 0.70f, 1.00f),
+            Element.Earth => new Color(0.55f, 0.80f, 0.30f),
+            Element.Light => new Color(1.00f, 0.92f, 0.55f),
+            Element.Dark  => new Color(0.65f, 0.35f, 0.85f),
+            _             => new Color(1f, 0.96f, 0.65f),
+        };
 
         // ── Status icons ──────────────────────────────────────────────────
 

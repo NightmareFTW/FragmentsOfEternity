@@ -88,7 +88,7 @@ namespace Combat
                         int roll   = Random.Range(skill.minValue, skill.maxValue + 1);
                         int dmg    = ComputeDamage(caster, target, roll, skill.canCrit, out bool crit, out int adv);
                         int actual = target.TakeDamage(dmg);
-                        EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit, Advantage = adv });
+                        EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit, Advantage = adv, Caster = caster });
                         ApplyEffects(skill.onHitEffects, target, caster);
                         break;
 
@@ -315,7 +315,7 @@ namespace Combat
             int roll   = Random.Range(12, 20);
             int dmg    = ComputeDamage(caster, target, roll, true, out bool crit, out int adv);
             int actual = target.TakeDamage(dmg);
-            EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit, Advantage = adv });
+            EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit, Advantage = adv, Caster = caster });
         }
 
         private SkillData PickEnemySkill(Unit enemy)
@@ -447,7 +447,7 @@ namespace Combat
     public struct SkillUsedEvent              { public SkillData Skill; public Unit Caster; public Unit Target; }
     public struct CombatInitEvent            { public List<Unit> Allies; public List<Unit> Enemies; }
     public struct TurnStartedEvent           { public Unit Actor; }
-    public struct UnitDamagedEvent           { public Unit Target; public int Damage; public bool IsCrit; public bool IsDoT; public int Advantage; }
+    public struct UnitDamagedEvent           { public Unit Target; public int Damage; public bool IsCrit; public bool IsDoT; public int Advantage; public Unit Caster; }
     public struct UnitHealedEvent            { public Unit Target; public int Amount; }
     public struct UnitStunnedEvent           { public Unit Actor; }
     public struct TargetChangedEvent         { public Unit Target; }
