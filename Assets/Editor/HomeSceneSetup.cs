@@ -190,7 +190,9 @@ namespace RPG.EditorTools
             skills.alignment = TextAnchor.UpperLeft;
 
             var enhance = MakeButton(t, "EnhanceBtn", "Enhance Gear",
-                new Vector2(0.05f, 0.245f), new Vector2(0.95f, 0.325f), new Color(0.55f, 0.42f, 0.14f));
+                new Vector2(0.05f, 0.245f), new Vector2(0.48f, 0.325f), new Color(0.55f, 0.42f, 0.14f));
+            var ascend = MakeButton(t, "AscendBtn", "Ascend",
+                new Vector2(0.52f, 0.245f), new Vector2(0.95f, 0.325f), new Color(0.55f, 0.20f, 0.55f));
 
             var levelUp = MakeButton(t, "LevelUpBtn", "Level Up",
                 new Vector2(0.05f, 0.15f), new Vector2(0.48f, 0.225f), new Color(0.24f, 0.46f, 0.30f));
@@ -217,6 +219,7 @@ namespace RPG.EditorTools
             so.FindProperty("_detailAutoEquipButton").objectReferenceValue = autoEquip;
             so.FindProperty("_detailUnequipButton").objectReferenceValue   = unequip;
             so.FindProperty("_detailEnhanceButton").objectReferenceValue   = enhance;
+            so.FindProperty("_detailAscendButton").objectReferenceValue    = ascend;
             so.FindProperty("_detailCloseButton").objectReferenceValue     = close;
             so.ApplyModifiedPropertiesWithoutUndo();
 

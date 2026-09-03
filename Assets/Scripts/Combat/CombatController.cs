@@ -73,8 +73,9 @@ namespace Combat
                 var h = HeroById(id);
                 if (h == null) continue;
                 var gear = GearService.BonusesFor(id, h);
+                var asc  = AscensionService.BonusesFor(id, h);
                 var u = Unit.FromHeroData(h, ProgressionService.GetLevel(id),
-                    gear.hp, gear.atk, gear.def, gear.spd,
+                    gear.hp + asc.hp, gear.atk + asc.atk, gear.def + asc.def, gear.spd + asc.spd,
                     gear.critRate, gear.critDamage, gear.resistance, gear.accuracy);
                 u.SetSkills(h.Skills());
                 units.Add(u);

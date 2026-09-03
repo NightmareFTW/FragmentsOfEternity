@@ -25,6 +25,10 @@ namespace Core
 
         // Owned gear pieces (each carries which hero it's equipped on, if any).
         public List<GearPiece> gear = new List<GearPiece>();
+
+        // Per-hero ascension stars (absent id → 0). Each star is paid for by
+        // consuming duplicate copies of that hero from ownedHeroIds.
+        public List<HeroAscension> heroAscensions = new List<HeroAscension>();
     }
 
     [Serializable]
@@ -32,6 +36,13 @@ namespace Core
     {
         public string id;
         public int    level = 1;
+    }
+
+    [Serializable]
+    public class HeroAscension
+    {
+        public string id;
+        public int    stars;
     }
 
     public enum GearSlot { Weapon, Armor, Accessory }

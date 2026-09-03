@@ -4,7 +4,11 @@ namespace Core
     // stats via HeroData growth when the unit is built for battle.
     public static class ProgressionService
     {
-        public const int MaxLevel = 20;
+        public const int BaseMaxLevel = 20;
+
+        // Ascension raises the cap: +10 levels per star, up to +50 at 5 stars.
+        public static int MaxLevelFor(string heroId) =>
+            BaseMaxLevel + AscensionService.GetStars(heroId) * 10;
 
         public static int GetLevel(string heroId)
         {
@@ -20,7 +24,7 @@ namespace Core
         {
             var profile = SaveSystem.Profile;
             int level   = GetLevel(heroId);
-            if (level >= MaxLevel) return -1;
+            if (level >= MaxLevelFor(heroId)) return -1;
 
             int cost = CostToLevel(level);
             if (profile.gems < cost) return -1;

@@ -38,6 +38,7 @@ namespace UI
         [SerializeField] private Button     _detailAutoEquipButton;
         [SerializeField] private Button     _detailUnequipButton;
         [SerializeField] private Button     _detailEnhanceButton;
+        [SerializeField] private Button     _detailAscendButton;
         [SerializeField] private Button     _detailCloseButton;
 
         private string _detailHeroId;
@@ -53,6 +54,7 @@ namespace UI
             _detailAutoEquipButton?.onClick.AddListener(OnDetailAutoEquip);
             _detailUnequipButton?.onClick.AddListener(OnDetailUnequip);
             _detailEnhanceButton?.onClick.AddListener(OnDetailEnhance);
+            _detailAscendButton?.onClick.AddListener(OnDetailAscend);
             _detailCloseButton?.onClick.AddListener(CloseDetail);
             if (_detailPanel) _detailPanel.SetActive(false);
 
@@ -70,7 +72,7 @@ namespace UI
             {
                 if (result.Success)
                 {
-                    string tag = result.IsNew ? "   NEW!" : "";
+                    string tag = result.IsNew ? "   NEW!" : "   (Dupe -> Ascension material)";
                     _resultLabel.text  = $"{result.Hero.heroName}  {Stars(result.Hero.rarity)}{tag}";
                     _resultLabel.color = RarityColor(result.Hero.rarity);
                 }
@@ -284,6 +286,15 @@ namespace UI
             RebuildAll();
         }
 
+        // Spends duplicate copies of this hero to raise its star count.
+        private void OnDetailAscend()
+        {
+            if (!AscensionService.Ascend(_detailHeroId))
+                SetError("Can't ascend — not enough duplicates, or already at max stars.");
+            FillDetail();
+            RebuildAll();
+        }
+
         private void FillDetail()
         {
             var hero = HeroById(_detailHeroId);
@@ -294,18 +305,21 @@ namespace UI
             bool inTeam = p.teamHeroIds.Contains(_detailHeroId);
 
             var gear = GearService.BonusesFor(_detailHeroId, hero);
+            var asc  = AscensionService.BonusesFor(_detailHeroId, hero);
+            int stars    = AscensionService.GetStars(_detailHeroId);
+            int maxLevel = ProgressionService.MaxLevelFor(_detailHeroId);
 
             if (_detailPortrait) _detailPortrait.sprite = PortraitFor(hero);
             if (_detailName)     { _detailName.text = hero.heroName; _detailName.color = RarityColor(hero.rarity); }
             if (_detailSubtitle) _detailSubtitle.text = $"{Stars(hero.rarity)}    {hero.element}    {hero.heroClass}";
-            if (_detailLevel)    _detailLevel.text = $"Level {level} / {ProgressionService.MaxLevel}";
+            if (_detailLevel)    _detailLevel.text = $"Level {level} / {maxLevel}    {AscensionService.StarsText(stars)}";
 
             if (_detailStats)
             {
-                int   hp  = Mathf.RoundToInt(hero.baseHP  + hero.hpGrowth  * (level - 1)) + gear.hp;
-                int   atk = Mathf.RoundToInt(hero.baseATK + hero.atkGrowth * (level - 1)) + gear.atk;
-                int   def = Mathf.RoundToInt(hero.baseDEF + hero.defGrowth * (level - 1)) + gear.def;
-                int   spd = hero.baseSPD + gear.spd;
+                int   hp  = Mathf.RoundToInt(hero.baseHP  + hero.hpGrowth  * (level - 1)) + gear.hp + asc.hp;
+                int   atk = Mathf.RoundToInt(hero.baseATK + hero.atkGrowth * (level - 1)) + gear.atk + asc.atk;
+                int   def = Mathf.RoundToInt(hero.baseDEF + hero.defGrowth * (level - 1)) + gear.def + asc.def;
+                int   spd = hero.baseSPD + gear.spd + asc.spd;
                 float cr  = Mathf.Clamp01(hero.baseCritRate   + gear.critRate);
                 float cd  = hero.baseCritDamage + gear.critDamage;
                 float res = Mathf.Clamp01(hero.baseResistance + gear.resistance);
@@ -345,7 +359,7 @@ namespace UI
             if (_detailTeamButton) SetButtonLabel(_detailTeamButton, inTeam ? "Remove from Team" : "Add to Team");
             if (_detailLevelUpButton)
             {
-                bool max  = level >= ProgressionService.MaxLevel;
+                bool max  = level >= maxLevel;
                 int  cost = ProgressionService.CostToLevel(level);
                 _detailLevelUpButton.interactable = !max && p.gems >= cost;
                 SetButtonLabel(_detailLevelUpButton, max ? "MAX LEVEL" : $"Level Up  ({cost}g)");
@@ -364,6 +378,15 @@ namespace UI
                     _detailEnhanceButton.interactable = false;
                     SetButtonLabel(_detailEnhanceButton, "No Gear to Enhance");
                 }
+            }
+            if (_detailAscendButton)
+            {
+                bool maxStars = stars >= AscensionService.MaxStars;
+                int  dupes    = AscensionService.AvailableDupes(_detailHeroId);
+                int  need     = AscensionService.DupesNeededForStar(stars);
+                _detailAscendButton.interactable = !maxStars && dupes >= need;
+                SetButtonLabel(_detailAscendButton,
+                    maxStars ? "MAX STARS" : $"Ascend  ({dupes}/{need} dupes)");
             }
         }
 
