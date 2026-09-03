@@ -656,9 +656,25 @@ namespace RPG.EditorTools
             bg.color         = new Color(0.02f, 0.02f, 0.05f, 0.35f);
             bg.raycastTarget = false;
 
+            // "NEXT ▼" header so the flow direction (top = soonest to act,
+            // reading down from there) is obvious at a glance rather than
+            // something the player has to infer from icon size alone.
+            var (_, nextLabel) = MakeText(go.transform, "NextLabel", "NEXT",
+                new Vector2(0f, 0.960f), new Vector2(1f, 1.000f),
+                fontSize: 13, style: FontStyle.Bold);
+            nextLabel.color = new Color(1f, 0.85f, 0.35f, 0.95f);
+
+            var (_, nextArrow) = MakeText(go.transform, "NextArrow", "▼",
+                new Vector2(0f, 0.900f), new Vector2(1f, 0.960f),
+                fontSize: 16, style: FontStyle.Bold);
+            nextArrow.color = new Color(1f, 0.85f, 0.35f, 0.80f);
+
+            var iconArea = MakeContainer(go.transform, "IconArea",
+                new Vector2(0f, 0f), new Vector2(1f, 0.895f));
+
             var ui = go.AddComponent<global::UI.TurnOrderUI>();
             var so = new SerializedObject(ui);
-            so.FindProperty("_container").objectReferenceValue = rt;
+            so.FindProperty("_container").objectReferenceValue = iconArea;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             return ui;
