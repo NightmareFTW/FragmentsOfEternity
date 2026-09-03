@@ -36,13 +36,29 @@ namespace Core
 
     public enum GearSlot { Weapon, Armor, Accessory }
 
+    // Set names inspired by the genre's classic gear sets (Speed/Crit/Life/...).
+    // Bonuses activate at 2 matching equipped pieces; Fatal needs all 3 slots.
+    public enum GearSet { None, Speed, Crit, Life, Guard, Fatal, Immunity, Focus, Rage }
+
+    public enum GearStatType { ATK, DEF, HP, SPD, CritRate, CritDamage, Resistance, Accuracy }
+
+    [Serializable]
+    public class GearSubstat
+    {
+        public GearStatType type;
+        public int          value;   // flat for ATK/DEF/SPD/HP-scale; whole percent for the rest
+    }
+
     [Serializable]
     public class GearPiece
     {
         public string   id;
         public GearSlot  slot;
         public int       rarity = 3;
-        public int       atk, def, hp, spd;
-        public string    equippedHero = "";   // empty when in the inventory
+        public GearSet   set;
+        public int       enhanceLevel;               // 0-15, boosts the piece's own flat stat
+        public int       atk, def, hp, spd;           // base flat rolls, before enhancement
+        public List<GearSubstat> substats = new List<GearSubstat>();
+        public string    equippedHero = "";           // empty when in the inventory
     }
 }

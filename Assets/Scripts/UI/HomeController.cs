@@ -37,6 +37,7 @@ namespace UI
         [SerializeField] private Button     _detailTeamButton;
         [SerializeField] private Button     _detailAutoEquipButton;
         [SerializeField] private Button     _detailUnequipButton;
+        [SerializeField] private Button     _detailEnhanceButton;
         [SerializeField] private Button     _detailCloseButton;
 
         private string _detailHeroId;
@@ -51,6 +52,7 @@ namespace UI
             _detailTeamButton?.onClick.AddListener(OnDetailTeamToggle);
             _detailAutoEquipButton?.onClick.AddListener(OnDetailAutoEquip);
             _detailUnequipButton?.onClick.AddListener(OnDetailUnequip);
+            _detailEnhanceButton?.onClick.AddListener(OnDetailEnhance);
             _detailCloseButton?.onClick.AddListener(CloseDetail);
             if (_detailPanel) _detailPanel.SetActive(false);
 
@@ -272,6 +274,16 @@ namespace UI
             FillDetail();
         }
 
+        // Always enhances the weakest equipped piece — no picker needed, and it
+        // always makes progress toward a fuller build.
+        private void OnDetailEnhance()
+        {
+            if (!GearService.EnhanceWeakestEquipped(_detailHeroId))
+                SetError("Can't enhance — no equipped gear, max level, or not enough gems.");
+            FillDetail();
+            RebuildAll();
+        }
+
         private void FillDetail()
         {
             var hero = HeroById(_detailHeroId);
@@ -281,10 +293,7 @@ namespace UI
             int  level  = ProgressionService.GetLevel(_detailHeroId);
             bool inTeam = p.teamHeroIds.Contains(_detailHeroId);
 
-            int gHP  = GearService.BonusHP(_detailHeroId);
-            int gATK = GearService.BonusATK(_detailHeroId);
-            int gDEF = GearService.BonusDEF(_detailHeroId);
-            int gSPD = GearService.BonusSPD(_detailHeroId);
+            var gear = GearService.BonusesFor(_detailHeroId, hero);
 
             if (_detailPortrait) _detailPortrait.sprite = PortraitFor(hero);
             if (_detailName)     { _detailName.text = hero.heroName; _detailName.color = RarityColor(hero.rarity); }
@@ -293,17 +302,20 @@ namespace UI
 
             if (_detailStats)
             {
-                int hp  = Mathf.RoundToInt(hero.baseHP  + hero.hpGrowth  * (level - 1)) + gHP;
-                int atk = Mathf.RoundToInt(hero.baseATK + hero.atkGrowth * (level - 1)) + gATK;
-                int def = Mathf.RoundToInt(hero.baseDEF + hero.defGrowth * (level - 1)) + gDEF;
-                int spd = hero.baseSPD + gSPD;
+                int   hp  = Mathf.RoundToInt(hero.baseHP  + hero.hpGrowth  * (level - 1)) + gear.hp;
+                int   atk = Mathf.RoundToInt(hero.baseATK + hero.atkGrowth * (level - 1)) + gear.atk;
+                int   def = Mathf.RoundToInt(hero.baseDEF + hero.defGrowth * (level - 1)) + gear.def;
+                int   spd = hero.baseSPD + gear.spd;
+                float cr  = Mathf.Clamp01(hero.baseCritRate   + gear.critRate);
+                float cd  = hero.baseCritDamage + gear.critDamage;
+                float res = Mathf.Clamp01(hero.baseResistance + gear.resistance);
                 _detailStats.text =
                     $"HP    {hp}\n" +
                     $"ATK   {atk}\n" +
                     $"DEF   {def}\n" +
                     $"SPD   {spd}\n" +
-                    $"CRIT  {Mathf.RoundToInt(hero.baseCritRate * 100)}%  x{hero.baseCritDamage:0.0}\n" +
-                    $"RES   {Mathf.RoundToInt(hero.baseResistance * 100)}%";
+                    $"CRIT  {Mathf.RoundToInt(cr * 100)}%  x{cd:0.0}\n" +
+                    $"RES   {Mathf.RoundToInt(res * 100)}%";
             }
 
             if (_detailSkills)
@@ -321,7 +333,10 @@ namespace UI
                 foreach (GearSlot slot in System.Enum.GetValues(typeof(GearSlot)))
                 {
                     var piece = GearService.EquippedOn(_detailHeroId, slot);
-                    sb.AppendLine($"{slot}: {(piece != null ? GearService.Describe(piece) : "(empty)")}");
+                    if (piece == null) { sb.AppendLine($"{slot}: (empty)"); continue; }
+                    sb.AppendLine($"{slot}: {GearService.Describe(piece)}");
+                    string subs = GearService.DescribeSubstats(piece);
+                    if (!string.IsNullOrEmpty(subs)) sb.AppendLine($"    {subs}");
                 }
                 sb.Append($"Inventory: {GearService.Inventory.Count} pieces");
                 _detailGear.text = sb.ToString();
@@ -334,6 +349,21 @@ namespace UI
                 int  cost = ProgressionService.CostToLevel(level);
                 _detailLevelUpButton.interactable = !max && p.gems >= cost;
                 SetButtonLabel(_detailLevelUpButton, max ? "MAX LEVEL" : $"Level Up  ({cost}g)");
+            }
+            if (_detailEnhanceButton)
+            {
+                bool hasTarget = GearService.TryGetWeakestEquipped(_detailHeroId, out var weakest);
+                if (hasTarget)
+                {
+                    int cost = GearService.EnhanceCost(weakest.enhanceLevel);
+                    _detailEnhanceButton.interactable = p.gems >= cost;
+                    SetButtonLabel(_detailEnhanceButton, $"Enhance Gear  ({cost}g)");
+                }
+                else
+                {
+                    _detailEnhanceButton.interactable = false;
+                    SetButtonLabel(_detailEnhanceButton, "No Gear to Enhance");
+                }
             }
         }
 

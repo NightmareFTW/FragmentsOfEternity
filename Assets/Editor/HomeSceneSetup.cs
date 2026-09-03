@@ -182,12 +182,15 @@ namespace RPG.EditorTools
             stats.alignment = TextAnchor.UpperLeft;
 
             var gear = MakeText(t, "Gear", "",
-                new Vector2(0.05f, 0.27f), new Vector2(0.50f, 0.51f), 22, FontStyle.Normal, new Color(0.75f, 0.92f, 0.82f));
+                new Vector2(0.05f, 0.34f), new Vector2(0.50f, 0.51f), 20, FontStyle.Normal, new Color(0.75f, 0.92f, 0.82f));
             gear.alignment = TextAnchor.UpperLeft;
 
             var skills = MakeText(t, "Skills", "",
                 new Vector2(0.52f, 0.27f), new Vector2(0.97f, 0.75f), 20, FontStyle.Normal, new Color(0.85f, 0.9f, 1f));
             skills.alignment = TextAnchor.UpperLeft;
+
+            var enhance = MakeButton(t, "EnhanceBtn", "Enhance Gear",
+                new Vector2(0.05f, 0.245f), new Vector2(0.95f, 0.325f), new Color(0.55f, 0.42f, 0.14f));
 
             var levelUp = MakeButton(t, "LevelUpBtn", "Level Up",
                 new Vector2(0.05f, 0.15f), new Vector2(0.48f, 0.225f), new Color(0.24f, 0.46f, 0.30f));
@@ -213,6 +216,7 @@ namespace RPG.EditorTools
             so.FindProperty("_detailTeamButton").objectReferenceValue      = team;
             so.FindProperty("_detailAutoEquipButton").objectReferenceValue = autoEquip;
             so.FindProperty("_detailUnequipButton").objectReferenceValue   = unequip;
+            so.FindProperty("_detailEnhanceButton").objectReferenceValue   = enhance;
             so.FindProperty("_detailCloseButton").objectReferenceValue     = close;
             so.ApplyModifiedPropertiesWithoutUndo();
 
