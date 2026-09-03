@@ -29,6 +29,13 @@ namespace Core
         // Per-hero ascension stars (absent id → 0). Each star is paid for by
         // consuming duplicate copies of that hero from ownedHeroIds.
         public List<HeroAscension> heroAscensions = new List<HeroAscension>();
+
+        // Stamina gates stage attempts/sweeps and regenerates over real time.
+        // staminaLastRegenTicks is DateTime.UtcNow.Ticks at the last regen
+        // calculation; 0 means "never initialized" (StaminaService fills the
+        // player up to max the first time it's asked).
+        public int  stamina;
+        public long staminaLastRegenTicks;
     }
 
     [Serializable]

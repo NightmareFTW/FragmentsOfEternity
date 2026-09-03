@@ -121,7 +121,8 @@ namespace UI
             var p    = SaveSystem.Profile;
             int cost = _pool != null ? _pool.summonCost : 300;
 
-            if (_gemsLabel) _gemsLabel.text = $"Gems: {p.gems}    Pity: {p.pityCounter}/{GachaService.PityThreshold}";
+            if (_gemsLabel) _gemsLabel.text =
+                $"Gems: {p.gems}   Stamina: {StaminaService.Current()}/{StaminaService.MaxStamina}   Pity: {p.pityCounter}/{GachaService.PityThreshold}";
             if (_teamLabel) _teamLabel.text = $"Team: {p.teamHeroIds.Count}/{TeamSize}   (tap a hero to add/remove)";
             if (_summonButton)   _summonButton.interactable   = p.gems >= cost;
             if (_summon10Button) _summon10Button.interactable = p.gems >= cost;
@@ -168,20 +169,56 @@ namespace UI
             var btn = go.AddComponent<Button>();
             btn.interactable = !locked;
             int captured = index;
-            btn.onClick.AddListener(() => LoadStage(captured));
+            // A cleared stage sweeps instantly instead of replaying it — the
+            // frontier stage (the one actually worth playing) still enters combat.
+            if (cleared) btn.onClick.AddListener(() => SweepStage(captured));
+            else         btn.onClick.AddListener(() => LoadStage(captured));
 
             var txt = MakeCellText(go.transform, Vector2.zero, Vector2.one);
             txt.alignment = TextAnchor.MiddleCenter;
-            string line2 = locked ? "Locked" : (cleared ? $"✓ +{stage.gemReward}" : $"+{stage.gemReward}");
+            string line2 = locked ? "Locked" : (cleared ? "SWEEP" : $"+{stage.gemReward}");
             txt.text  = $"Stage {index + 1}\n{line2}";
             txt.color = locked ? new Color(0.6f, 0.6f, 0.65f) : Color.white;
         }
 
         private void LoadStage(int index)
         {
+            if (!StaminaService.CanAfford(StaminaService.StageCost))
+            {
+                SetError($"Not enough stamina ({StaminaService.Current()}/{StaminaService.StageCost} needed).");
+                return;
+            }
+            StaminaService.Spend(StaminaService.StageCost);
             AudioManager.Instance.Play(Sfx.Click);
             CampaignState.SelectedStage = index;
             SceneManager.LoadScene("Combat");
+        }
+
+        // Instantly grants a stage already cleared — same stamina cost as
+        // playing it, no star-rating gate (the campaign doesn't track those).
+        private void SweepStage(int index)
+        {
+            if (_campaign == null || _campaign.stages == null || index < 0 || index >= _campaign.stages.Length) return;
+            if (!StaminaService.CanAfford(StaminaService.StageCost))
+            {
+                SetError($"Not enough stamina ({StaminaService.Current()}/{StaminaService.StageCost} needed).");
+                return;
+            }
+            StaminaService.Spend(StaminaService.StageCost);
+            AudioManager.Instance.Play(Sfx.Click);
+
+            int gems = _campaign.stages[index].gemReward;
+            SaveSystem.Profile.gems += gems;
+            var drop = GearService.RollDrop(index);
+            SaveSystem.Save();
+
+            if (_resultLabel)
+            {
+                string dropText = drop != null ? $"  +{drop.slot} ({GearService.Describe(drop)})" : "";
+                _resultLabel.text  = $"Swept Stage {index + 1}: +{gems} Gems{dropText}";
+                _resultLabel.color = new Color(0.6f, 0.9f, 1f);
+            }
+            RebuildAll();
         }
 
         private void BuildGrid(PlayerProfile p)

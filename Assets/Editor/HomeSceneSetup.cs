@@ -37,8 +37,10 @@ namespace RPG.EditorTools
                 new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.96f), 54, FontStyle.Bold,
                 new Color(1f, 0.85f, 0.4f));
 
+            // Smaller than the other top labels — this line now also carries
+            // stamina and pity, so it needs the extra room to avoid wrapping.
             var gems = MakeText(canvas.transform, "GemsLabel", "Gems: 0",
-                new Vector2(0.05f, 0.815f), new Vector2(0.95f, 0.87f), 40, FontStyle.Bold,
+                new Vector2(0.05f, 0.815f), new Vector2(0.95f, 0.87f), 30, FontStyle.Bold,
                 new Color(0.6f, 0.9f, 1f));
 
             var result = MakeText(canvas.transform, "ResultLabel", "",
