@@ -22,6 +22,7 @@ namespace Combat
         [SerializeField] private Text           _nameLabel;
         [SerializeField] private Image          _portraitImage;
         [SerializeField] private GameObject     _silhouette;
+        [SerializeField] private Image          _hitFlashImage;   // tinted red on hit — usually the portrait
 
         private Image         _image;
         private RectTransform _rt;
@@ -46,7 +47,11 @@ namespace Combat
 
         private void Awake()
         {
-            _image         = GetComponent<Image>();
+            // The panel root has no visible background any more (avatar-only
+            // look) — the hit-flash tint needs an explicit visible target,
+            // usually the portrait. Falls back to the root Image for scenes
+            // not yet regenerated with RPG -> Setup Combat Scene.
+            _image         = _hitFlashImage != null ? _hitFlashImage : GetComponent<Image>();
             _rt            = GetComponent<RectTransform>();
             _originalScale = transform.localScale;
             if (_image) _originalColor = _image.color;

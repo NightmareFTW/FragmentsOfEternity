@@ -29,6 +29,7 @@ namespace Combat
 
             EventBus.Subscribe<UnitClickedEvent>(OnUnitClicked);
             EventBus.Raise(new CombatInitEvent { Allies = _allies, Enemies = _enemies });
+            EventBus.Raise(new TurnOrderChangedEvent { Order = PredictTurnOrder(8) });
             StartCoroutine(TickLoop());
         }
 
@@ -168,6 +169,15 @@ namespace Combat
             yield return new WaitForSeconds(0.35f);
             if (_combatOver || !_awaitingInput || _activeAlly != ally) yield break;
 
+            // Press the advantage on whoever's closest to dying, rather than
+            // always the first enemy in the row — matters for AoE-vs-focus calls.
+            var weakest = MostWounded(_enemies);
+            if (weakest != null)
+            {
+                _currentTarget = weakest;
+                EventBus.Raise(new TargetChangedEvent { Target = weakest });
+            }
+
             int slot = AutoPickSlot(ally);
             if (slot >= 0)
             {
@@ -182,16 +192,39 @@ namespace Combat
             }
         }
 
-        // Prefer a ready damage skill; otherwise the first ready skill.
-        private static int AutoPickSlot(Unit ally)
+        // Heal a critically wounded ally first; otherwise AoE when it'll hit 2+
+        // enemies; otherwise any damage skill; otherwise a heal or buff; last
+        // resort is whatever's ready at all.
+        private int AutoPickSlot(Unit ally)
         {
-            int fallback = -1;
+            int healSlot = -1, aoeSlot = -1, dmgSlot = -1, buffSlot = -1, fallback = -1;
             for (int i = 0; i < ally.Skills.Length; i++)
             {
-                if (ally.Skills[i] == null || !ally.IsSkillReady(i)) continue;
-                if (ally.Skills[i].skillType == SkillType.Damage) return i;
+                var skill = ally.Skills[i];
+                if (skill == null || !ally.IsSkillReady(i)) continue;
                 if (fallback < 0) fallback = i;
+
+                switch (skill.skillType)
+                {
+                    case SkillType.Heal:
+                        if (healSlot < 0) healSlot = i;
+                        break;
+                    case SkillType.Damage:
+                        if (skill.targetType == TargetType.AllEnemies) { if (aoeSlot < 0) aoeSlot = i; }
+                        else if (dmgSlot < 0) dmgSlot = i;
+                        break;
+                    case SkillType.Buff:
+                        if (buffSlot < 0) buffSlot = i;
+                        break;
+                }
             }
+
+            bool allyCritical = AnyBelow(_allies, 0.35f);
+            if (allyCritical && healSlot >= 0) return healSlot;
+            if (CountAlive(_enemies) >= 2 && aoeSlot >= 0) return aoeSlot;
+            if (dmgSlot >= 0) return dmgSlot;
+            if (healSlot >= 0) return healSlot;
+            if (buffSlot >= 0) return buffSlot;
             return fallback;
         }
 
@@ -220,6 +253,7 @@ namespace Combat
         private IEnumerator ExecuteTurn(Unit actor)
         {
             actor.ConsumeMeter();
+            EventBus.Raise(new TurnOrderChangedEvent { Order = PredictTurnOrder(8) });
 
             // Damage-over-time resolves first — a unit can die on its own turn.
             int dot = actor.TickDamageOverTime();
@@ -318,13 +352,39 @@ namespace Combat
             EventBus.Raise(new UnitDamagedEvent { Target = target, Damage = actual, IsCrit = crit, Advantage = adv, Caster = caster });
         }
 
+        // Same priority shape as the player's auto-battle: heal a hurting team
+        // first, favour AoE when it'll land on 2+ players, else attack.
         private SkillData PickEnemySkill(Unit enemy)
         {
-            var ready = new List<int>();
+            int healSlot = -1, aoeSlot = -1, dmgSlot = -1, buffSlot = -1;
             for (int i = 0; i < enemy.Skills.Length; i++)
-                if (enemy.Skills[i] != null && enemy.IsSkillReady(i)) ready.Add(i);
-            if (ready.Count == 0) return null;
-            return enemy.Skills[ready[Random.Range(0, ready.Count)]];
+            {
+                var skill = enemy.Skills[i];
+                if (skill == null || !enemy.IsSkillReady(i)) continue;
+
+                switch (skill.skillType)
+                {
+                    case SkillType.Heal:
+                        if (healSlot < 0) healSlot = i;
+                        break;
+                    case SkillType.Damage:
+                        if (skill.targetType == TargetType.AllEnemies) { if (aoeSlot < 0) aoeSlot = i; }
+                        else if (dmgSlot < 0) dmgSlot = i;
+                        break;
+                    case SkillType.Buff:
+                        if (buffSlot < 0) buffSlot = i;
+                        break;
+                }
+            }
+
+            int chosen = -1;
+            if (AnyBelow(_enemies, 0.35f) && healSlot >= 0) chosen = healSlot;
+            else if (CountAlive(_allies) >= 2 && aoeSlot >= 0) chosen = aoeSlot;
+            else if (dmgSlot >= 0) chosen = dmgSlot;
+            else if (healSlot >= 0) chosen = healSlot;
+            else if (buffSlot >= 0) chosen = buffSlot;
+
+            return chosen >= 0 ? enemy.Skills[chosen] : null;
         }
 
         // ── Combat math ──────────────────────────────────────────────────────
@@ -442,6 +502,60 @@ namespace Combat
             }
             return worst;
         }
+
+        private static bool AnyBelow(List<Unit> team, float hpRatio)
+        {
+            foreach (var u in team)
+                if (u.IsAlive && (float)u.HP / u.MaxHP < hpRatio) return true;
+            return false;
+        }
+
+        private static int CountAlive(List<Unit> team)
+        {
+            int n = 0;
+            foreach (var u in team) if (u.IsAlive) n++;
+            return n;
+        }
+
+        // ── Turn order prediction ───────────────────────────────────────────
+        // A pure read-only simulation (never touches real Unit state) of who
+        // acts next, for the turn-order queue UI. Ignores future status effects
+        // since those can't be known in advance — matches how the real tick
+        // loop resolves speed, just without stun/silence side effects.
+
+        public List<Unit> PredictTurnOrder(int count)
+        {
+            var meters = new List<float>(_units.Count);
+            var alive  = new List<Unit>(_units.Count);
+            foreach (var u in _units)
+            {
+                if (!u.IsAlive) continue;
+                alive.Add(u);
+                meters.Add(u.TurnMeter);
+            }
+
+            var order = new List<Unit>(count);
+            for (int step = 0; step < count && alive.Count > 0; step++)
+            {
+                int   bestIdx  = -1;
+                float bestTime = float.MaxValue;
+                for (int i = 0; i < alive.Count; i++)
+                {
+                    float speed     = alive[i].EffectiveSpeed;
+                    float remaining = Mathf.Max(0f, 100f - meters[i]);
+                    float t         = speed > 0f ? remaining / speed : float.MaxValue;
+                    if (t < bestTime - 0.0001f) { bestTime = t; bestIdx = i; }
+                }
+                if (bestIdx < 0) break;
+
+                for (int i = 0; i < alive.Count; i++)
+                    meters[i] += alive[i].EffectiveSpeed * bestTime;
+
+                order.Add(alive[bestIdx]);
+                meters[bestIdx] = 0f;
+            }
+            return order;
+        }
     }
 
     public struct SkillUsedEvent              { public SkillData Skill; public Unit Caster; public Unit Target; }
@@ -455,6 +569,7 @@ namespace Combat
     public struct UnitResistedEvent          { public Unit Target; }
     public struct SkillCooldownsChangedEvent  { public Unit Owner; public SkillData[] Skills; public int[] Cooldowns; public bool Silenced; }
     public struct StatusEffectAppliedEvent    { public Unit Target; }
+    public struct TurnOrderChangedEvent       { public List<Unit> Order; }
 
     // Combat QoL that persists across battles in a session; Time.timeScale is
     // driven from Speed while a battle is running.

@@ -40,7 +40,7 @@ namespace RPG.EditorTools
             // Unit panels must be added before the HUD so they render behind it.
             BuildUnitPanels(canvas.transform, encounter);
 
-            BuildTitle(canvas.transform);
+            BuildTurnOrderQueue(canvas.transform);
 
             var hud = BuildHUD(canvas.transform,
                 out var turnLabel,
@@ -285,35 +285,55 @@ namespace RPG.EditorTools
             string[] enemyLabels = LabelsFrom(encounter != null ? encounter.enemies : null, "GOBLIN");
 
             // Enemy row (upper), then player row (lower).
-            BuildRow(canvasTransform, "Enemy", enemyLabels, 0.58f, 0.78f, isPlayer: false,
-                bgColor:     new Color(0.16f, 0.04f, 0.04f, 0.94f),   // dark burgundy
-                accentColor: new Color(1.00f, 0.42f, 0.12f, 0.80f),   // orange stripe
-                barColor:    new Color(1.00f, 0.55f, 0.10f));         // orange ATB bar
-
-            BuildRow(canvasTransform, "Player", allyLabels, 0.30f, 0.50f, isPlayer: true,
-                bgColor:     new Color(0.04f, 0.07f, 0.18f, 0.94f),   // dark navy
-                accentColor: new Color(0.35f, 0.65f, 1.00f, 0.80f),   // blue stripe
-                barColor:    new Color(0.25f, 0.85f, 0.40f));         // green ATB bar
+            BuildRow(canvasTransform, "Enemy", enemyLabels, 0.58f, 0.78f, isPlayer: false);
+            BuildRow(canvasTransform, "Player", allyLabels, 0.30f, 0.50f, isPlayer: true);
         }
 
-        // Lays out a horizontal row of unit panels across the canvas width.
-        static void BuildRow(Transform canvasTransform, string prefix, string[] labels,
-            float yMin, float yMax, bool isPlayer, Color bgColor, Color accentColor, Color barColor)
+        // Cross/diamond formation: (x, depth) per slot, depth 0 = furthest from
+        // the opponent, 1 = closest (the "front line" / tank spot). Slot 0 is
+        // always front, the last slot is always back (healer spot); classes
+        // aren't auto-detected — it's a positional formation, not a role one.
+        static readonly Vector2[] Formation1 = { new Vector2(0.50f, 0.50f) };
+        static readonly Vector2[] Formation2 = { new Vector2(0.34f, 0.62f), new Vector2(0.66f, 0.38f) };
+        static readonly Vector2[] Formation3 = { new Vector2(0.50f, 0.68f), new Vector2(0.25f, 0.36f), new Vector2(0.75f, 0.36f) };
+        static readonly Vector2[] Formation4 = { new Vector2(0.50f, 0.72f), new Vector2(0.25f, 0.46f), new Vector2(0.75f, 0.46f), new Vector2(0.50f, 0.22f) };
+
+        const float PanelHalfW = 0.13f;
+        const float PanelHalfH = 0.050f;
+
+        static Vector2[] FormationFor(int count) => count switch
         {
-            int count = Mathf.Max(1, labels.Length);
-            const float xStart = 0.02f, xEnd = 0.98f, gap = 0.015f;
-            float pw = (xEnd - xStart - gap * (count - 1)) / count;
+            1 => Formation1,
+            2 => Formation2,
+            3 => Formation3,
+            4 => Formation4,
+            _ => null,
+        };
+
+        // Lays out unit panels in the cross formation above (falls back to an
+        // even horizontal spread for team sizes the formation table doesn't cover).
+        static void BuildRow(Transform canvasTransform, string prefix, string[] labels,
+            float yMin, float yMax, bool isPlayer)
+        {
+            int count      = Mathf.Max(1, labels.Length);
+            var formation  = FormationFor(count);
+            const float xStart = 0.03f, xEnd = 0.97f;
 
             for (int i = 0; i < count; i++)
             {
-                float axMin = xStart + i * (pw + gap);
-                float axMax = axMin + pw;
-                var spawn = new Vector2((axMin + axMax) * 0.5f, Mathf.Lerp(yMin, yMax, 0.72f));
+                float x, depthT;
+                if (formation != null) { x = formation[i].x; depthT = formation[i].y; }
+                else { x = (i + 0.5f) / count; depthT = 0.5f; }
 
-                MakeUnitPanel(canvasTransform, $"{prefix}Panel{i}",
-                    bgColor, accentColor, labels[i],
-                    new Vector2(axMin, yMin), new Vector2(axMax, yMax),
-                    spawn, isPlayer, slotIndex: i, barColor: barColor);
+                float cx = xStart + x * (xEnd - xStart);
+                float cy = isPlayer ? Mathf.Lerp(yMin, yMax, depthT) : Mathf.Lerp(yMax, yMin, depthT);
+
+                var aMin  = new Vector2(cx - PanelHalfW, cy - PanelHalfH);
+                var aMax  = new Vector2(cx + PanelHalfW, cy + PanelHalfH);
+                var spawn = new Vector2(cx, cy);
+
+                MakeUnitPanel(canvasTransform, $"{prefix}Panel{i}", labels[i],
+                    aMin, aMax, spawn, isPlayer, slotIndex: i);
             }
         }
 
@@ -327,13 +347,15 @@ namespace RPG.EditorTools
             return labels;
         }
 
+        // No frame: the panel root is an invisible click-catcher sized to the
+        // formation slot; only the avatar, a thin HP bar and status icons are
+        // actually drawn. The target highlight and hit-flash both live on the
+        // portrait itself so they read against the character, not a box.
         static Combat.UnitVisual MakeUnitPanel(
-            Transform canvasTransform, string name,
-            Color bgColor, Color accentColor, string label,
+            Transform canvasTransform, string name, string label,
             Vector2 anchorMin, Vector2 anchorMax, Vector2 spawnAnchor,
-            bool isPlayer, int slotIndex, Color barColor)
+            bool isPlayer, int slotIndex)
         {
-            // ── Root panel (dark background) ──────────────────────────────
             var go = new GameObject(name);
             go.transform.SetParent(canvasTransform, false);
 
@@ -342,29 +364,24 @@ namespace RPG.EditorTools
             rt.anchorMax = anchorMax;
             rt.offsetMin = rt.offsetMax = Vector2.zero;
 
+            // Fully transparent — still catches taps (Image.raycastTarget
+            // ignores alpha), but draws nothing.
             var img = go.AddComponent<Image>();
-            img.color = bgColor;
+            img.color = new Color(0f, 0f, 0f, 0f);
 
-            // ── Left accent stripe ────────────────────────────────────────
-            MakeRect(go.transform, "AccentStripe",
-                new Vector2(0f, 0f), new Vector2(0.03f, 1f),
-                accentColor);
+            var hpFill = MakeHPBar(go.transform);
 
-            // ── ATB turn meter (top) + HP bar (just below) ────────────────
-            var fillRT           = MakeTurnMeterBar(go.transform, barColor);
-            var (hpFill, hpText) = MakeHPBar(go.transform);
-
-            // ── Character silhouette area (y: 0.22–0.79 of panel) ─────────
+            // ── Character silhouette (fallback when no portrait art exists) ─
             var charArea = MakeContainer(go.transform, "CharacterArea",
-                new Vector2(0.045f, 0.22f), new Vector2(1.00f, 0.79f));
+                new Vector2(0.05f, 0.10f), new Vector2(0.95f, 0.84f));
             BuildCharacterSilhouette(charArea, isPlayer);
 
             // Portrait overlay (real art) — disabled until a Sprite is set at runtime.
             var portraitGO = new GameObject("Portrait");
             portraitGO.transform.SetParent(go.transform, false);
             var portraitRT = portraitGO.AddComponent<RectTransform>();
-            portraitRT.anchorMin = new Vector2(0.045f, 0.22f);
-            portraitRT.anchorMax = new Vector2(1.00f, 0.79f);
+            portraitRT.anchorMin = new Vector2(0.05f, 0.10f);
+            portraitRT.anchorMax = new Vector2(0.95f, 0.84f);
             portraitRT.offsetMin = portraitRT.offsetMax = Vector2.zero;
             var portraitImg = portraitGO.AddComponent<Image>();
             portraitImg.color          = Color.white;
@@ -372,50 +389,46 @@ namespace RPG.EditorTools
             portraitImg.raycastTarget  = false;
             portraitImg.enabled        = false;
 
-            // ── Unit name label (y: 0.12–0.20) ───────────────────────────
-            var (_, lbl) = MakeText(go.transform, "UnitLabel", label,
-                new Vector2(0.045f, 0.12f), new Vector2(0.96f, 0.20f),
-                fontSize: 20, style: FontStyle.Bold);
-            lbl.color = new Color(0.82f, 0.90f, 1.00f);
+            // Target highlight glows the portrait itself, not a bounding box.
+            var highlight = portraitGO.AddComponent<Outline>();
+            highlight.effectColor    = new Color(1f, 0.85f, 0.2f, 0.85f);
+            highlight.effectDistance = new Vector2(4f, 4f);
+            highlight.enabled        = false;
 
-            // ── Status icons strip at bottom (y: 0.01–0.10) ──────────────
+            // ── Status icons strip at bottom ──────────────────────────────
             var statusContainer = BuildStatusContainer(go.transform,
-                new Vector2(0.045f, 0.01f), new Vector2(0.96f, 0.10f));
-
-            // ── Target highlight outline ───────────────────────────────────
-            var highlight = MakeTargetHighlight(go);
+                new Vector2(0.05f, 0.00f), new Vector2(0.95f, 0.085f));
 
             // ── Wire UnitVisual ───────────────────────────────────────────
             var visual = go.AddComponent<Combat.UnitVisual>();
             var so     = new SerializedObject(visual);
             so.FindProperty("_canvasRoot").objectReferenceValue        = canvasTransform;
             so.FindProperty("_damageSpawnAnchor").vector2Value         = spawnAnchor;
-            so.FindProperty("_turnMeterFill").objectReferenceValue     = fillRT;
             so.FindProperty("_isPlayerUnit").boolValue                 = isPlayer;
             so.FindProperty("_slotIndex").intValue                     = slotIndex;
             so.FindProperty("_targetHighlight").objectReferenceValue   = highlight;
             so.FindProperty("_statusContainer").objectReferenceValue   = statusContainer;
             so.FindProperty("_hpFill").objectReferenceValue            = hpFill;
-            so.FindProperty("_hpLabel").objectReferenceValue           = hpText;
-            so.FindProperty("_nameLabel").objectReferenceValue         = lbl;
             so.FindProperty("_portraitImage").objectReferenceValue     = portraitImg;
             so.FindProperty("_silhouette").objectReferenceValue        = charArea.gameObject;
+            so.FindProperty("_hitFlashImage").objectReferenceValue     = portraitImg;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             return visual;
         }
 
-        // HP bar sits just under the turn meter; UnitVisual drives fill via anchorMax.x.
-        static (RectTransform, Text) MakeHPBar(Transform parent)
+        // A slim bar just above the avatar — no framing box, no number label
+        // (panels are compact now; a number here would be unreadably small).
+        static RectTransform MakeHPBar(Transform parent)
         {
             var bgGO = new GameObject("HPBarBG");
             bgGO.transform.SetParent(parent, false);
             var bgRT = bgGO.AddComponent<RectTransform>();
-            bgRT.anchorMin = new Vector2(0.045f, 0.805f);
-            bgRT.anchorMax = new Vector2(0.960f, 0.870f);
+            bgRT.anchorMin = new Vector2(0.10f, 0.87f);
+            bgRT.anchorMax = new Vector2(0.90f, 0.95f);
             bgRT.offsetMin = bgRT.offsetMax = Vector2.zero;
             var bgImg = bgGO.AddComponent<Image>();
-            bgImg.color         = new Color(0.06f, 0.02f, 0.02f, 0.92f);
+            bgImg.color         = new Color(0.06f, 0.02f, 0.02f, 0.85f);
             bgImg.raycastTarget = false;
 
             var fillGO = new GameObject("HPBarFill");
@@ -428,11 +441,7 @@ namespace RPG.EditorTools
             fillImg.color         = new Color(0.30f, 0.85f, 0.35f);
             fillImg.raycastTarget = false;
 
-            var (_, txt) = MakeText(bgGO.transform, "HPText", "",
-                Vector2.zero, Vector2.one, fontSize: 16, style: FontStyle.Bold);
-            txt.color = Color.white;
-
-            return (fillRT, txt);
+            return fillRT;
         }
 
         // ── Character silhouettes ──────────────────────────────────────────
@@ -554,36 +563,6 @@ namespace RPG.EditorTools
                 new Color(0.04f, 0.02f, 0.02f));
         }
 
-        // ── Turn meter ─────────────────────────────────────────────────────
-        // Positioned at the TOP of the panel (y: 0.88–0.97).
-        // UnitVisual.Update() drives fill via anchorMax.x (0 → 1).
-
-        static RectTransform MakeTurnMeterBar(Transform parent, Color barColor)
-        {
-            var bgGO = new GameObject("TurnMeterBG");
-            bgGO.transform.SetParent(parent, false);
-            var bgRT = bgGO.AddComponent<RectTransform>();
-            bgRT.anchorMin = new Vector2(0.045f, 0.88f);
-            bgRT.anchorMax = new Vector2(0.960f, 0.97f);
-            bgRT.offsetMin = bgRT.offsetMax = Vector2.zero;
-            var bgImg = bgGO.AddComponent<Image>();
-            bgImg.color         = new Color(0.05f, 0.05f, 0.08f, 0.92f);
-            bgImg.raycastTarget = false;
-
-            var fillGO = new GameObject("TurnMeterFill");
-            fillGO.transform.SetParent(bgGO.transform, false);
-            var fillRT = fillGO.AddComponent<RectTransform>();
-            fillRT.anchorMin = new Vector2(0f, 0f);
-            fillRT.anchorMax = new Vector2(0f, 1f);
-            fillRT.offsetMin = new Vector2(2f,  2f);
-            fillRT.offsetMax = new Vector2(2f, -2f);
-            var fillImg = fillGO.AddComponent<Image>();
-            fillImg.color         = barColor;
-            fillImg.raycastTarget = false;
-
-            return fillRT;
-        }
-
         // ── Status container ───────────────────────────────────────────────
 
         static Transform BuildStatusContainer(Transform panelTransform,
@@ -606,17 +585,6 @@ namespace RPG.EditorTools
             shadow.effectDistance = new Vector2(0f, -1f);
 
             return go.transform;
-        }
-
-        // ── Target highlight ───────────────────────────────────────────────
-
-        static Outline MakeTargetHighlight(GameObject panelGO)
-        {
-            var outline = panelGO.AddComponent<Outline>();
-            outline.effectColor    = new Color(1f, 0.85f, 0.2f, 0.70f);
-            outline.effectDistance = new Vector2(3f, 3f);
-            outline.enabled        = false;
-            return outline;
         }
 
         // ── Helpers ────────────────────────────────────────────────────────
@@ -675,15 +643,30 @@ namespace RPG.EditorTools
             return (go, txt);
         }
 
-        // ── Title ──────────────────────────────────────────────────────────
+        // ── Turn order queue ─────────────────────────────────────────────────
+        // A lateral "who's next" strip along the right edge, replacing the old
+        // per-panel ATB fill bars (which read as confusingly similar to the HP
+        // bars). Epic Seven-style: nearest-to-act at the top, shrinking down.
 
-        static void BuildTitle(Transform parent)
+        static global::UI.TurnOrderUI BuildTurnOrderQueue(Transform canvasTransform)
         {
-            var (_, txt) = MakeText(
-                parent, "Title", "Fragments of Eternity",
-                new Vector2(0f, 0.88f), new Vector2(1f, 0.96f),
-                fontSize: 52, style: FontStyle.Bold);
-            txt.color = new Color(1f, 0.85f, 0.4f);
+            var go = new GameObject("TurnOrderQueue");
+            go.transform.SetParent(canvasTransform, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.905f, 0.30f);
+            rt.anchorMax = new Vector2(0.985f, 0.78f);
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+
+            var bg = go.AddComponent<Image>();
+            bg.color         = new Color(0.02f, 0.02f, 0.05f, 0.35f);
+            bg.raycastTarget = false;
+
+            var ui = go.AddComponent<global::UI.TurnOrderUI>();
+            var so = new SerializedObject(ui);
+            so.FindProperty("_container").objectReferenceValue = rt;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            return ui;
         }
 
         // ── HUD ────────────────────────────────────────────────────────────
@@ -713,11 +696,12 @@ namespace RPG.EditorTools
             s3 = MakeSkillButton(hudGO.transform, "Skill3Button", "Skill 3",
                 new Vector2(0.66f, 0.04f), new Vector2(0.96f, 0.14f));
 
-            // Battle controls (top-right band, between the enemy row and title).
+            // Battle controls — top band (where the title used to sit), clearly
+            // visible and selectable as their own options rather than tucked in.
             auto = MakeSkillButton(hudGO.transform, "AutoButton", "Auto: OFF",
-                new Vector2(0.58f, 0.79f), new Vector2(0.78f, 0.85f));
+                new Vector2(0.55f, 0.885f), new Vector2(0.76f, 0.955f));
             speed = MakeSkillButton(hudGO.transform, "SpeedButton", "1x",
-                new Vector2(0.79f, 0.79f), new Vector2(0.99f, 0.85f));
+                new Vector2(0.77f, 0.885f), new Vector2(0.98f, 0.955f));
 
             return hud;
         }
