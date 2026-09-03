@@ -227,22 +227,6 @@ namespace RPG.EditorTools
             MakeBGRect(root.transform, "PlatformGlowEnemy",
                 new Vector2(0.56f, 0.140f), new Vector2(0.96f, 0.215f),
                 new Color(0.92f, 0.42f, 0.08f, 0.15f));
-
-            // ── Row grounding strips (2-row 4v4 layout) ──────────────────
-            // Faint dark shelves just under each unit row so the units feel
-            // planted rather than floating.
-            MakeBGRect(root.transform, "EnemyRowShelf",
-                new Vector2(0.00f, 0.560f), new Vector2(1.00f, 0.585f),
-                new Color(0.00f, 0.00f, 0.02f, 0.55f));
-            MakeBGRect(root.transform, "EnemyRowGlow",
-                new Vector2(0.02f, 0.575f), new Vector2(0.98f, 0.600f),
-                new Color(0.55f, 0.22f, 0.06f, 0.10f));
-            MakeBGRect(root.transform, "AllyRowShelf",
-                new Vector2(0.00f, 0.278f), new Vector2(1.00f, 0.303f),
-                new Color(0.00f, 0.00f, 0.02f, 0.55f));
-            MakeBGRect(root.transform, "AllyRowGlow",
-                new Vector2(0.02f, 0.293f), new Vector2(0.98f, 0.318f),
-                new Color(0.10f, 0.28f, 0.55f, 0.10f));
         }
 
         // Anchor-based solid rect — raycastTarget always false for background shapes.
@@ -279,27 +263,35 @@ namespace RPG.EditorTools
 
         // ── Unit panels ────────────────────────────────────────────────────
 
+        // Classic side-on JRPG arrangement: player party on the left facing
+        // right, enemies on the right facing left. The queue occupies the
+        // strip left of the player column (see BuildTurnOrderQueue).
         static void BuildUnitPanels(Transform canvasTransform, Data.EncounterData encounter)
         {
             string[] allyLabels  = LabelsFrom(encounter != null ? encounter.allies  : null, "HERO");
             string[] enemyLabels = LabelsFrom(encounter != null ? encounter.enemies : null, "GOBLIN");
 
-            // Enemy row (upper), then player row (lower).
-            BuildRow(canvasTransform, "Enemy", enemyLabels, 0.58f, 0.78f, isPlayer: false);
-            BuildRow(canvasTransform, "Player", allyLabels, 0.30f, 0.50f, isPlayer: true);
+            BuildTeamColumn(canvasTransform, "Player", allyLabels,  0.100f, 0.490f, isPlayer: true);
+            BuildTeamColumn(canvasTransform, "Enemy",  enemyLabels, 0.510f, 0.965f, isPlayer: false);
         }
 
-        // Cross/diamond formation: (x, depth) per slot, depth 0 = furthest from
-        // the opponent, 1 = closest (the "front line" / tank spot). Slot 0 is
-        // always front, the last slot is always back (healer spot); classes
-        // aren't auto-detected — it's a positional formation, not a role one.
+        // Cross/diamond formation per slot: x = depth (0 furthest from the
+        // opponent, 1 closest — the "front line" / tank spot), y = spread
+        // across the formation's own vertical band. Slot 0 is always front,
+        // the last slot is always back (healer spot); classes aren't
+        // auto-detected — it's a positional formation, not a role one.
         static readonly Vector2[] Formation1 = { new Vector2(0.50f, 0.50f) };
-        static readonly Vector2[] Formation2 = { new Vector2(0.34f, 0.62f), new Vector2(0.66f, 0.38f) };
-        static readonly Vector2[] Formation3 = { new Vector2(0.50f, 0.68f), new Vector2(0.25f, 0.36f), new Vector2(0.75f, 0.36f) };
-        static readonly Vector2[] Formation4 = { new Vector2(0.50f, 0.72f), new Vector2(0.25f, 0.46f), new Vector2(0.75f, 0.46f), new Vector2(0.50f, 0.22f) };
+        static readonly Vector2[] Formation2 = { new Vector2(0.62f, 0.34f), new Vector2(0.38f, 0.66f) };
+        static readonly Vector2[] Formation3 = { new Vector2(0.68f, 0.50f), new Vector2(0.36f, 0.25f), new Vector2(0.36f, 0.75f) };
+        static readonly Vector2[] Formation4 = { new Vector2(0.72f, 0.50f), new Vector2(0.46f, 0.25f), new Vector2(0.46f, 0.75f), new Vector2(0.22f, 0.50f) };
 
-        const float PanelHalfW = 0.13f;
-        const float PanelHalfH = 0.050f;
+        const float PanelHalfW = 0.095f;
+        const float PanelHalfH = 0.100f;
+
+        // Shared vertical band both formations spread across — a mobile
+        // portrait canvas has far more height than width to spend here.
+        const float FormationYMin = 0.20f;
+        const float FormationYMax = 0.86f;
 
         static Vector2[] FormationFor(int count) => count switch
         {
@@ -310,23 +302,25 @@ namespace RPG.EditorTools
             _ => null,
         };
 
-        // Lays out unit panels in the cross formation above (falls back to an
-        // even horizontal spread for team sizes the formation table doesn't cover).
-        static void BuildRow(Transform canvasTransform, string prefix, string[] labels,
-            float yMin, float yMax, bool isPlayer)
+        // Lays out one team's panels in the cross formation within [xMin,xMax]
+        // (falls back to an even vertical spread for team sizes the formation
+        // table doesn't cover).
+        static void BuildTeamColumn(Transform canvasTransform, string prefix, string[] labels,
+            float xMin, float xMax, bool isPlayer)
         {
-            int count      = Mathf.Max(1, labels.Length);
-            var formation  = FormationFor(count);
-            const float xStart = 0.03f, xEnd = 0.97f;
+            int count     = Mathf.Max(1, labels.Length);
+            var formation = FormationFor(count);
 
             for (int i = 0; i < count; i++)
             {
-                float x, depthT;
-                if (formation != null) { x = formation[i].x; depthT = formation[i].y; }
-                else { x = (i + 0.5f) / count; depthT = 0.5f; }
+                float depthT, spreadT;
+                if (formation != null) { depthT = formation[i].x; spreadT = formation[i].y; }
+                else { depthT = 0.5f; spreadT = (i + 0.5f) / count; }
 
-                float cx = xStart + x * (xEnd - xStart);
-                float cy = isPlayer ? Mathf.Lerp(yMin, yMax, depthT) : Mathf.Lerp(yMax, yMin, depthT);
+                // Depth 1 = nearest the opponent: toward xMax for the player
+                // (facing right), toward xMin for enemies (facing left).
+                float cx = isPlayer ? Mathf.Lerp(xMin, xMax, depthT) : Mathf.Lerp(xMax, xMin, depthT);
+                float cy = Mathf.Lerp(FormationYMin, FormationYMax, spreadT);
 
                 var aMin  = new Vector2(cx - PanelHalfW, cy - PanelHalfH);
                 var aMax  = new Vector2(cx + PanelHalfW, cy + PanelHalfH);
@@ -644,17 +638,18 @@ namespace RPG.EditorTools
         }
 
         // ── Turn order queue ─────────────────────────────────────────────────
-        // A lateral "who's next" strip along the right edge, replacing the old
-        // per-panel ATB fill bars (which read as confusingly similar to the HP
-        // bars). Epic Seven-style: nearest-to-act at the top, shrinking down.
+        // A lateral "who's next" strip along the left edge (same side as the
+        // player party), replacing the old per-panel ATB fill bars (which read
+        // as confusingly similar to the HP bars). Epic Seven-style:
+        // nearest-to-act at the top, shrinking down.
 
         static global::UI.TurnOrderUI BuildTurnOrderQueue(Transform canvasTransform)
         {
             var go = new GameObject("TurnOrderQueue");
             go.transform.SetParent(canvasTransform, false);
             var rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0.905f, 0.30f);
-            rt.anchorMax = new Vector2(0.985f, 0.78f);
+            rt.anchorMin = new Vector2(0.010f, FormationYMin);
+            rt.anchorMax = new Vector2(0.075f, FormationYMax);
             rt.offsetMin = rt.offsetMax = Vector2.zero;
 
             var bg = go.AddComponent<Image>();
@@ -682,10 +677,14 @@ namespace RPG.EditorTools
             FullStretch(hudGO.AddComponent<RectTransform>());
             var hud = hudGO.AddComponent<global::UI.CombatHUD>();
 
+            // A thin band just above the skill buttons and below the formation
+            // (FormationYMin) — with both teams now sharing the centre of the
+            // screen (left/right, not top/bottom) there's no more open middle
+            // gap to put this in.
             var (_, tl) = MakeText(
                 hudGO.transform, "TurnLabel", "–",
-                new Vector2(0.25f, 0.51f), new Vector2(0.75f, 0.57f),
-                fontSize: 34, style: FontStyle.Normal);
+                new Vector2(0.15f, 0.155f), new Vector2(0.85f, 0.195f),
+                fontSize: 30, style: FontStyle.Normal);
             tl.color  = Color.white;
             turnLabel = tl;
 
