@@ -29,6 +29,80 @@ namespace RPG.EditorTools
             return SaveSprite(name, tex);
         }
 
+        // Organic wispy patches via multi-octave Perlin noise, thresholded into
+        // distinct cloud/nebula clumps instead of a smooth uniform haze — layer
+        // a few of these with different colours/seeds over a flat gradient to
+        // break up the uniformity and add per-region colour variation.
+        public static Sprite NebulaCloud(string name, Color color, int size, int seed,
+            int octaves = 4, float baseScale = 3f, float persistence = 0.5f,
+            float threshold = 0.35f, float contrast = 1.8f)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var rng = new System.Random(seed);
+            float offX = (float)rng.NextDouble() * 1000f;
+            float offY = (float)rng.NextDouble() * 1000f;
+
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = (float)x / size, ny = (float)y / size;
+                    float amp = 1f, freq = baseScale, sum = 0f, maxAmp = 0f;
+                    for (int o = 0; o < octaves; o++)
+                    {
+                        sum    += Mathf.PerlinNoise(offX + nx * freq, offY + ny * freq) * amp;
+                        maxAmp += amp;
+                        amp    *= persistence;
+                        freq   *= 2f;
+                    }
+                    float n = sum / maxAmp;
+                    float a = Mathf.Clamp01((n - threshold) * contrast);
+                    tex.SetPixel(x, y, new Color(color.r, color.g, color.b, color.a * a));
+                }
+            return SaveSprite(name, tex);
+        }
+
+        // An irregular ruined-skyline silhouette (rolling noise plus a few
+        // sharper broken-pillar spikes) filled from the bottom up — replaces
+        // flat rectangular "pillar" blocks with something that reads as
+        // actual ruins rather than solid bars.
+        public static Sprite JaggedSkyline(string name, Color color, int width, int height, int seed,
+            float baseHeightFrac = 0.35f, float noiseScale = 6f, float roughness = 0.35f, int spikeCount = 5)
+        {
+            var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var rng = new System.Random(seed);
+            float offset = (float)rng.NextDouble() * 1000f;
+
+            var heights = new float[width];
+            for (int x = 0; x < width; x++)
+            {
+                float nx = (float)x / width;
+                float n1 = Mathf.PerlinNoise(offset + nx * noiseScale, 0f);
+                float n2 = Mathf.PerlinNoise(offset + nx * noiseScale * 3.1f, 5f);
+                heights[x] = Mathf.Clamp01(baseHeightFrac + (n1 - 0.5f) * 0.5f + (n2 - 0.5f) * roughness);
+            }
+
+            for (int s = 0; s < spikeCount; s++)
+            {
+                int   cx      = rng.Next(0, width);
+                int   spikeW  = Mathf.Max(4, rng.Next(width / 30, width / 10));
+                float spikeH  = heights[Mathf.Clamp(cx, 0, width - 1)] + 0.12f + (float)rng.NextDouble() * 0.18f;
+                int   xMin    = Mathf.Max(0, cx - spikeW), xMax = Mathf.Min(width, cx + spikeW);
+                for (int x = xMin; x < xMax; x++)
+                {
+                    float t = 1f - Mathf.Abs(x - cx) / (float)spikeW;
+                    heights[x] = Mathf.Max(heights[x], Mathf.Lerp(heights[x], spikeH, t * t));
+                }
+            }
+
+            for (int x = 0; x < width; x++)
+            {
+                int hPix = Mathf.RoundToInt(heights[x] * height);
+                for (int y = 0; y < height; y++)
+                    tex.SetPixel(x, y, y < hPix ? color : new Color(0f, 0f, 0f, 0f));
+            }
+            return SaveSprite(name, tex);
+        }
+
         // Soft radial falloff from a bright centre to transparent — glows,
         // crystal shards, magic cores. Stretch the display rect (non-square
         // anchors) to turn the circle into an ellipse/band for free.

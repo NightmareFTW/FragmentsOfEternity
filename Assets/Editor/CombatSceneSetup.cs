@@ -142,6 +142,9 @@ namespace RPG.EditorTools
             var crystalGold = ProceduralArt.RadialGlow("Bg_CrystalGold", new Color(1.00f, 0.55f, 0.20f, 1f), 96,  1.8f);
             var floorGlow   = ProceduralArt.RadialGlow("Bg_FloorGlow",   Color.white, 128, 1.4f);
             var stars       = ProceduralArt.Speckle("Bg_CombatStars", new Color(0.85f, 0.85f, 1.00f, 1f), 512, 90, 1.2f, 2.6f, seed: 4242);
+            var nebula1     = ProceduralArt.NebulaCloud("Bg_CombatNebula1", new Color(0.30f, 0.15f, 0.55f, 0.55f), 384, seed: 11, baseScale: 2.5f);
+            var nebula2     = ProceduralArt.NebulaCloud("Bg_CombatNebula2", new Color(0.55f, 0.30f, 0.15f, 0.35f), 384, seed: 97, baseScale: 3.5f);
+            var skyline     = ProceduralArt.JaggedSkyline("Bg_CombatSkyline", new Color(0.10f, 0.06f, 0.20f, 0.75f), 768, 300, seed: 55);
 
             // ── Backdrop layers ──────────────────────────────────────────
             MakeBGRect(root.transform, "Backdrop",
@@ -154,6 +157,13 @@ namespace RPG.EditorTools
             // Speckled stars over the sky, faded near the horizon.
             ProceduralArt.Place(root.transform, "SkyStars", stars,
                 new Vector2(0f, 0.60f), new Vector2(1f, 1f), new Color(1f, 1f, 1f, 0.5f));
+
+            // Organic nebula patches break up the flat gradient with real
+            // colour variation instead of a uniform band.
+            ProceduralArt.Place(root.transform, "SkyNebula1", nebula1,
+                new Vector2(-0.2f, 0.55f), new Vector2(0.75f, 1.05f), new Color(1f, 1f, 1f, 0.8f));
+            ProceduralArt.Place(root.transform, "SkyNebula2", nebula2,
+                new Vector2(0.25f, 0.58f), new Vector2(1.2f, 1.0f), new Color(1f, 1f, 1f, 0.7f));
 
             MakeBGRect(root.transform, "GroundLayer",
                 new Vector2(0f, 0f), new Vector2(1f, 0.20f),
@@ -179,24 +189,12 @@ namespace RPG.EditorTools
                 new Vector2(0.90f, 0.50f), new Vector2(40f, 1450f),
                 new Color(0.90f, 0.60f, 0.15f, 0.020f), 7f);
 
-            // ── Pillars / ruins — kept above panel zone (y > 0.55) ──────
-            MakeBGRect(root.transform, "PillarL1",
-                new Vector2(0.06f, 0.55f), new Vector2(0.12f, 0.82f),
-                new Color(0.13f, 0.08f, 0.28f, 0.65f));
-            MakeBGRect(root.transform, "PillarL2",
-                new Vector2(0.16f, 0.55f), new Vector2(0.20f, 0.74f),
-                new Color(0.11f, 0.07f, 0.24f, 0.50f));
-            MakeBGRect(root.transform, "PillarR1",
-                new Vector2(0.80f, 0.55f), new Vector2(0.86f, 0.80f),
-                new Color(0.13f, 0.08f, 0.28f, 0.62f));
-            MakeBGRect(root.transform, "PillarR2",
-                new Vector2(0.88f, 0.55f), new Vector2(0.93f, 0.72f),
-                new Color(0.11f, 0.07f, 0.24f, 0.48f));
-
-            // Centre column visible in the gap between the two unit panels
-            MakeBGRect(root.transform, "CenterPillar",
-                new Vector2(0.46f, 0.55f), new Vector2(0.54f, 0.80f),
-                new Color(0.11f, 0.07f, 0.24f, 0.55f));
+            // ── Ruined skyline — a jagged silhouette along the horizon, full
+            // width, sitting low (below the formations, which start at
+            // FormationYMin = 0.20) instead of flanking pillars that would
+            // now sit behind the left/right unit columns.
+            ProceduralArt.Place(root.transform, "RuinSkyline", skyline,
+                new Vector2(0f, 0.10f), new Vector2(1f, 0.34f), new Color(1f, 1f, 1f, 1f));
 
             // ── Crystal shards — soft glowing blobs instead of flat chips ──
             ProceduralArt.PlaceFixed(root.transform, "CrystalL1", crystalBlue,
