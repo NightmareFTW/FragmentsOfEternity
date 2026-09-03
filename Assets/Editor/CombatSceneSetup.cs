@@ -132,24 +132,36 @@ namespace RPG.EditorTools
             root.transform.SetParent(canvasTransform, false);
             FullStretch(root.AddComponent<RectTransform>());
 
+            // ── Generated art (baked once as real assets; see ProceduralArt) ──
+            var skyGrad    = ProceduralArt.VerticalGradient("Bg_CombatSky",
+                new Color(0.10f, 0.04f, 0.22f), new Color(0.04f, 0.02f, 0.11f));
+            var horizonGlow = ProceduralArt.RadialGlow("Bg_CombatHorizon", new Color(0.55f, 0.35f, 0.95f, 1f), 160, 1.6f);
+            var coreOuter   = ProceduralArt.RadialGlow("Bg_CoreOuter",   new Color(0.85f, 0.65f, 0.20f, 1f), 128, 2.0f);
+            var coreInner   = ProceduralArt.RadialGlow("Bg_CoreInner",   new Color(1.00f, 0.90f, 0.45f, 1f), 96,  2.6f);
+            var crystalBlue = ProceduralArt.RadialGlow("Bg_CrystalBlue", new Color(0.35f, 0.65f, 1.00f, 1f), 96,  1.8f);
+            var crystalGold = ProceduralArt.RadialGlow("Bg_CrystalGold", new Color(1.00f, 0.55f, 0.20f, 1f), 96,  1.8f);
+            var floorGlow   = ProceduralArt.RadialGlow("Bg_FloorGlow",   Color.white, 128, 1.4f);
+            var stars       = ProceduralArt.Speckle("Bg_CombatStars", new Color(0.85f, 0.85f, 1.00f, 1f), 512, 90, 1.2f, 2.6f, seed: 4242);
+
             // ── Backdrop layers ──────────────────────────────────────────
             MakeBGRect(root.transform, "Backdrop",
                 Vector2.zero, Vector2.one,
                 new Color(0.03f, 0.03f, 0.10f));
 
-            MakeBGRect(root.transform, "SkyLayer",
-                new Vector2(0f, 0.52f), new Vector2(1f, 1f),
-                new Color(0.06f, 0.02f, 0.16f, 0.75f));
+            ProceduralArt.Place(root.transform, "SkyLayer", skyGrad,
+                new Vector2(0f, 0.52f), new Vector2(1f, 1f), new Color(1f, 1f, 1f, 0.85f));
+
+            // Speckled stars over the sky, faded near the horizon.
+            ProceduralArt.Place(root.transform, "SkyStars", stars,
+                new Vector2(0f, 0.60f), new Vector2(1f, 1f), new Color(1f, 1f, 1f, 0.5f));
 
             MakeBGRect(root.transform, "GroundLayer",
                 new Vector2(0f, 0f), new Vector2(1f, 0.20f),
                 new Color(0.01f, 0.01f, 0.03f, 0.80f));
 
-            // ── Horizon glow ─────────────────────────────────────────────
-            // Raised to 0.60 alpha so the arena mid-section reads purple.
-            MakeBGRect(root.transform, "Horizon",
-                new Vector2(0f, 0.12f), new Vector2(1f, 0.60f),
-                new Color(0.12f, 0.05f, 0.28f, 0.60f));
+            // ── Horizon glow — a soft radial stretched into a wide band ───
+            ProceduralArt.Place(root.transform, "Horizon", horizonGlow,
+                new Vector2(-0.15f, 0.12f), new Vector2(1.15f, 0.60f), new Color(1f, 1f, 1f, 0.55f));
 
             // ── Fog bands ────────────────────────────────────────────────
             MakeBGRect(root.transform, "FogBand1",
@@ -186,30 +198,21 @@ namespace RPG.EditorTools
                 new Vector2(0.46f, 0.55f), new Vector2(0.54f, 0.80f),
                 new Color(0.11f, 0.07f, 0.24f, 0.55f));
 
-            // ── Crystal shards — bigger and brighter ─────────────────────
-            MakeBGBeam(root.transform, "CrystalL1",
-                new Vector2(0.09f, 0.66f), new Vector2(28f, 110f),
-                new Color(0.20f, 0.52f, 0.95f, 0.55f), 28f);
-            MakeBGBeam(root.transform, "CrystalL2",
-                new Vector2(0.06f, 0.61f), new Vector2(18f, 80f),
-                new Color(0.30f, 0.58f, 1.00f, 0.40f), 18f);
-            MakeBGBeam(root.transform, "CrystalR1",
-                new Vector2(0.91f, 0.64f), new Vector2(28f, 110f),
-                new Color(0.95f, 0.42f, 0.12f, 0.55f), -28f);
-            MakeBGBeam(root.transform, "CrystalR2",
-                new Vector2(0.94f, 0.59f), new Vector2(18f, 80f),
-                new Color(1.00f, 0.48f, 0.15f, 0.40f), -18f);
+            // ── Crystal shards — soft glowing blobs instead of flat chips ──
+            ProceduralArt.PlaceFixed(root.transform, "CrystalL1", crystalBlue,
+                new Vector2(0.09f, 0.66f), new Vector2(90f, 90f), new Color(1f, 1f, 1f, 0.65f));
+            ProceduralArt.PlaceFixed(root.transform, "CrystalL2", crystalBlue,
+                new Vector2(0.06f, 0.61f), new Vector2(60f, 60f), new Color(1f, 1f, 1f, 0.50f));
+            ProceduralArt.PlaceFixed(root.transform, "CrystalR1", crystalGold,
+                new Vector2(0.91f, 0.64f), new Vector2(90f, 90f), new Color(1f, 1f, 1f, 0.65f));
+            ProceduralArt.PlaceFixed(root.transform, "CrystalR2", crystalGold,
+                new Vector2(0.94f, 0.59f), new Vector2(60f, 60f), new Color(1f, 1f, 1f, 0.50f));
 
-            // ── Eternity Core — subtle ambient diamond between units ──────
-            MakeBGBeam(root.transform, "EternityCoreGlow",
-                new Vector2(0.50f, 0.67f), new Vector2(100f, 100f),
-                new Color(0.55f, 0.38f, 0.08f, 0.05f), 45f);
-            MakeBGBeam(root.transform, "EternityCoreOuter",
-                new Vector2(0.50f, 0.67f), new Vector2(60f, 60f),
-                new Color(0.65f, 0.48f, 0.12f, 0.09f), 45f);
-            MakeBGBeam(root.transform, "EternityCoreInner",
-                new Vector2(0.50f, 0.67f), new Vector2(36f, 36f),
-                new Color(0.90f, 0.72f, 0.25f, 0.13f), 45f);
+            // ── Eternity Core — a real soft glow instead of 3 fake-diamond squares ──
+            ProceduralArt.PlaceFixed(root.transform, "EternityCoreOuter", coreOuter,
+                new Vector2(0.50f, 0.67f), new Vector2(220f, 220f), new Color(1f, 1f, 1f, 0.28f));
+            ProceduralArt.PlaceFixed(root.transform, "EternityCoreInner", coreInner,
+                new Vector2(0.50f, 0.67f), new Vector2(110f, 110f), new Color(1f, 1f, 1f, 0.45f));
 
             // ── Battle platform ──────────────────────────────────────────
             MakeBGRect(root.transform, "PlatformShadow",
@@ -222,12 +225,10 @@ namespace RPG.EditorTools
             MakeBGRect(root.transform, "PlatformEdge",
                 new Vector2(0.01f, 0.196f), new Vector2(0.99f, 0.202f),
                 new Color(0.35f, 0.24f, 0.65f, 0.45f));
-            MakeBGRect(root.transform, "PlatformGlowHero",
-                new Vector2(0.04f, 0.140f), new Vector2(0.44f, 0.215f),
-                new Color(0.15f, 0.42f, 0.92f, 0.15f));
-            MakeBGRect(root.transform, "PlatformGlowEnemy",
-                new Vector2(0.56f, 0.140f), new Vector2(0.96f, 0.215f),
-                new Color(0.92f, 0.42f, 0.08f, 0.15f));
+            ProceduralArt.Place(root.transform, "PlatformGlowHero", floorGlow,
+                new Vector2(0.04f, 0.100f), new Vector2(0.44f, 0.255f), new Color(0.20f, 0.50f, 1.00f, 0.30f));
+            ProceduralArt.Place(root.transform, "PlatformGlowEnemy", floorGlow,
+                new Vector2(0.56f, 0.100f), new Vector2(0.96f, 0.255f), new Color(1.00f, 0.45f, 0.10f, 0.30f));
         }
 
         // Anchor-based solid rect — raycastTarget always false for background shapes.

@@ -270,9 +270,18 @@ namespace RPG.EditorTools
 
         static void BuildBackground(Transform canvas)
         {
-            MakeImage(canvas, "Backdrop",   Vector2.zero,               Vector2.one,               new Color(0.05f, 0.04f, 0.10f));
-            MakeImage(canvas, "TopBand",    new Vector2(0f, 0.80f),     new Vector2(1f, 1f),       new Color(0.10f, 0.06f, 0.20f, 0.60f));
-            MakeImage(canvas, "MidGlow",    new Vector2(0f, 0.58f),     new Vector2(1f, 0.72f),    new Color(0.16f, 0.10f, 0.30f, 0.35f));
+            var skyGrad  = ProceduralArt.VerticalGradient("Bg_HomeSky",
+                new Color(0.12f, 0.08f, 0.24f), new Color(0.04f, 0.03f, 0.08f));
+            var midGlow  = ProceduralArt.RadialGlow("Bg_HomeMidGlow", new Color(0.55f, 0.35f, 0.85f, 1f), 160, 1.7f);
+            var stars    = ProceduralArt.Speckle("Bg_HomeStars", new Color(0.85f, 0.85f, 1.00f, 1f), 512, 70, 1.2f, 2.4f, seed: 777);
+
+            ProceduralArt.Place(canvas, "Backdrop", skyGrad,
+                Vector2.zero, Vector2.one, new Color(1f, 1f, 1f, 0.9f));
+            ProceduralArt.Place(canvas, "Stars", stars,
+                new Vector2(0f, 0.35f), new Vector2(1f, 1f), new Color(1f, 1f, 1f, 0.45f));
+            MakeImage(canvas, "TopBand",    new Vector2(0f, 0.80f),     new Vector2(1f, 1f),       new Color(0.10f, 0.06f, 0.20f, 0.45f));
+            ProceduralArt.Place(canvas, "MidGlow", midGlow,
+                new Vector2(-0.2f, 0.55f), new Vector2(1.2f, 0.78f), new Color(1f, 1f, 1f, 0.35f));
             MakeImage(canvas, "BottomBand", new Vector2(0f, 0f),        new Vector2(1f, 0.30f),    new Color(0.03f, 0.03f, 0.08f, 0.70f));
         }
 
