@@ -41,7 +41,19 @@ namespace UI
 
             if (_rewardLabel)
             {
-                if (evt.Victory)
+                if (ArenaState.Active)
+                {
+                    if (evt.Victory)
+                    {
+                        int gems = ArenaState.RivalReward;
+                        SaveSystem.Profile.gems += gems;
+                        SaveSystem.Profile.arenaWins++;
+                        SaveSystem.Save();
+                        _rewardLabel.text = $"Defeated {ArenaState.RivalName}: +{gems} Gems";
+                    }
+                    else _rewardLabel.text = $"Lost to {ArenaState.RivalName} — no reward.";
+                }
+                else if (evt.Victory)
                 {
                     int gems = CampaignService.GrantStageVictory(_campaign, CampaignState.SelectedStage);
                     var drop = GearService.RollDrop(CampaignState.SelectedStage);

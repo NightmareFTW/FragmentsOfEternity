@@ -68,6 +68,11 @@ namespace RPG.EditorTools
                 new Vector2(0.52f, 0.19f), new Vector2(0.94f, 0.265f),
                 new Color(0.35f, 0.24f, 0.55f));
 
+            // Sits in the gap between the summon buttons and the reset button.
+            var arena = MakeButton(canvas.transform, "ArenaButton", "ARENA (quick match)",
+                new Vector2(0.06f, 0.095f), new Vector2(0.94f, 0.165f),
+                new Color(0.55f, 0.18f, 0.20f));
+
             var reset = MakeButton(canvas.transform, "ResetButton", "Reset",
                 new Vector2(0.72f, 0.02f), new Vector2(0.97f, 0.07f),
                 new Color(0.30f, 0.16f, 0.18f));
@@ -86,6 +91,7 @@ namespace RPG.EditorTools
             so.FindProperty("_resultLabel").objectReferenceValue    = result;
             so.FindProperty("_summonButton").objectReferenceValue   = summon;
             so.FindProperty("_summon10Button").objectReferenceValue = summon10;
+            so.FindProperty("_arenaButton").objectReferenceValue    = arena;
             so.FindProperty("_resetButton").objectReferenceValue    = reset;
             so.FindProperty("_gridContainer").objectReferenceValue  = grid;
             so.FindProperty("_stageContainer").objectReferenceValue = stages;

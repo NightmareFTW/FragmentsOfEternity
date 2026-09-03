@@ -20,6 +20,7 @@ namespace UI
         [SerializeField] private Text          _resultLabel;
         [SerializeField] private Button        _summonButton;
         [SerializeField] private Button        _summon10Button;
+        [SerializeField] private Button        _arenaButton;
         [SerializeField] private Button        _resetButton;
         [SerializeField] private RectTransform _gridContainer;
         [SerializeField] private RectTransform _stageContainer;
@@ -47,6 +48,7 @@ namespace UI
         {
             _summonButton?.onClick.AddListener(OnSummon);
             _summon10Button?.onClick.AddListener(OnSummon10);
+            _arenaButton?.onClick.AddListener(OnArena);
             _resetButton?.onClick.AddListener(OnReset);
 
             _detailLevelUpButton?.onClick.AddListener(OnDetailLevelUp);
@@ -112,6 +114,43 @@ namespace UI
             SaveSystem.Reset();
             if (_resultLabel) { _resultLabel.text = "Progress reset."; _resultLabel.color = Color.white; }
             RebuildAll();
+        }
+
+        // Quick-match: rolls one AI rival squad scaled to the player's own
+        // team level and jumps straight into it — no rival browser, since
+        // there's no real opponent behind it to browse anyway.
+        private void OnArena()
+        {
+            if (!StaminaService.CanAfford(StaminaService.ArenaCost))
+            {
+                SetError($"Not enough stamina ({StaminaService.Current()}/{StaminaService.ArenaCost} needed).");
+                return;
+            }
+            if (SaveSystem.Profile.teamHeroIds == null || SaveSystem.Profile.teamHeroIds.Count == 0)
+            {
+                SetError("Pick a team before entering the Arena.");
+                return;
+            }
+
+            var rival = ArenaService.GenerateRival(_pool);
+            if (rival.heroIds == null || rival.heroIds.Length == 0)
+            {
+                SetError("No rival could be generated — summon some heroes first.");
+                return;
+            }
+
+            StaminaService.Spend(StaminaService.ArenaCost);
+            AudioManager.Instance.Play(Sfx.Click);
+
+            var roster = new (string heroId, int level)[rival.heroIds.Length];
+            for (int i = 0; i < rival.heroIds.Length; i++)
+                roster[i] = (rival.heroIds[i], rival.level);
+
+            ArenaState.Active      = true;
+            ArenaState.RivalName   = rival.name;
+            ArenaState.RivalReward = rival.reward;
+            ArenaState.RivalRoster = roster;
+            SceneManager.LoadScene("Combat");
         }
 
         // ── Refresh ─────────────────────────────────────────────────────────
@@ -207,6 +246,7 @@ namespace UI
             }
             StaminaService.Spend(StaminaService.StageCost);
             AudioManager.Instance.Play(Sfx.Click);
+            ArenaState.Active = false;
             CampaignState.SelectedStage = index;
             SceneManager.LoadScene("Combat");
         }

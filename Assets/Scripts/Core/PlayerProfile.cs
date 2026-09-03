@@ -36,6 +36,10 @@ namespace Core
         // player up to max the first time it's asked).
         public int  stamina;
         public long staminaLastRegenTicks;
+
+        // Simple lifetime counter — there's no real ladder/leaderboard without
+        // a backend, just a stat to show progress on the Arena.
+        public int arenaWins;
     }
 
     [Serializable]

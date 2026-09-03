@@ -12,6 +12,7 @@ namespace Core
         public const int MaxStamina       = 120;
         public const int RegenIntervalMin = 5;   // +1 stamina every 5 real minutes
         public const int StageCost        = 6;
+        public const int ArenaCost        = 8;
 
         // Applies any regen owed since the last check, then returns current stamina.
         public static int Current()

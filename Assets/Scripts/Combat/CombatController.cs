@@ -25,20 +25,31 @@ namespace Combat
             EventBus.Subscribe<CombatEndEvent>(OnCombatEnd);
             EventBus.Subscribe<SkillSelectedEvent>(OnSkillSelected);
 
-            var encounter = ResolveEncounter();
+            List<Unit> allies, enemies;
+            if (ArenaState.Active)
+            {
+                // Arena: both sides are player-style squads (own team vs a
+                // generated rival roster), not a fixed EncounterData.
+                allies  = BuildPlayerTeam() ?? DefaultAllies();
+                enemies = BuildArenaEnemies();
+            }
+            else
+            {
+                var encounter = ResolveEncounter();
 
-            // Enemies always come from the encounter (or the built-in fallback).
-            List<Unit> enemies = (encounter != null && encounter.enemies != null && encounter.enemies.Length > 0)
-                ? BuildTeam(encounter.enemies, encounter.enemyLevel)
-                : DefaultEnemies();
+                // Enemies always come from the encounter (or the built-in fallback).
+                enemies = (encounter != null && encounter.enemies != null && encounter.enemies.Length > 0)
+                    ? BuildTeam(encounter.enemies, encounter.enemyLevel)
+                    : DefaultEnemies();
 
-            // Allies: the player's chosen roster if they have one, else the
-            // encounter's fixed allies, else a built-in starter.
-            List<Unit> allies = BuildPlayerTeam();
-            if (allies == null || allies.Count == 0)
-                allies = (encounter != null && encounter.allies != null && encounter.allies.Length > 0)
-                    ? BuildTeam(encounter.allies, encounter.allyLevel)
-                    : DefaultAllies();
+                // Allies: the player's chosen roster if they have one, else the
+                // encounter's fixed allies, else a built-in starter.
+                allies = BuildPlayerTeam();
+                if (allies == null || allies.Count == 0)
+                    allies = (encounter != null && encounter.allies != null && encounter.allies.Length > 0)
+                        ? BuildTeam(encounter.allies, encounter.allyLevel)
+                        : DefaultAllies();
+            }
 
             _battle = gameObject.AddComponent<BattleManager>();
             _battle.Init(allies, enemies);
@@ -89,6 +100,25 @@ namespace Combat
             foreach (var h in _heroPool.heroes)
                 if (h != null && h.heroId == id) return h;
             return null;
+        }
+
+        // The generated Arena rival's roster, resolved from the same pool the
+        // player summons from — no gear/ascension, just level (matching how
+        // ordinary PvE enemies are already built).
+        private List<Unit> BuildArenaEnemies()
+        {
+            var team = new List<Unit>();
+            if (_heroPool == null || _heroPool.heroes == null || ArenaState.RivalRoster == null) return team;
+
+            foreach (var (heroId, level) in ArenaState.RivalRoster)
+            {
+                var h = HeroById(heroId);
+                if (h == null) continue;
+                var unit = Unit.FromHeroData(h, level);
+                unit.SetSkills(h.Skills());
+                team.Add(unit);
+            }
+            return team;
         }
 
         private static List<Unit> BuildTeam(HeroData[] heroes, int level)
