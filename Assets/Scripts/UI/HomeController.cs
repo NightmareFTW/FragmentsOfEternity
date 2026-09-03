@@ -135,11 +135,12 @@ namespace UI
 
         private void BuildStages(PlayerProfile p)
         {
-            if (_stageContainer == null || _campaign == null || _campaign.stages == null) return;
+            if (_stageContainer == null || _campaign == null || _campaign.chapters == null) return;
             for (int i = _stageContainer.childCount - 1; i >= 0; i--)
                 Destroy(_stageContainer.GetChild(i).gameObject);
 
-            int n = _campaign.stages.Length;
+            var stages = _campaign.AllStages();
+            int n = stages.Length;
             if (n == 0) return;
 
             const float gap = 0.02f;
@@ -147,9 +148,25 @@ namespace UI
             for (int i = 0; i < n; i++)
             {
                 float xMin = i * (w + gap);
-                MakeStageButton(i, _campaign.stages[i], p.campaignProgress,
+                MakeStageButton(i, stages[i], p.campaignProgress,
                     new Vector2(xMin, 0f), new Vector2(xMin + w, 1f));
             }
+        }
+
+        // "1-2" style label: chapter number - stage-within-chapter number, both
+        // 1-based, derived from the same flattened order AllStages() uses.
+        private string StageLabel(int globalIndex)
+        {
+            if (_campaign == null || _campaign.chapters == null) return $"Stage {globalIndex + 1}";
+            int offset = 0;
+            for (int c = 0; c < _campaign.chapters.Length; c++)
+            {
+                var chapter = _campaign.chapters[c];
+                int len = chapter != null && chapter.stages != null ? chapter.stages.Length : 0;
+                if (globalIndex < offset + len) return $"{c + 1}-{globalIndex - offset + 1}";
+                offset += len;
+            }
+            return $"Stage {globalIndex + 1}";
         }
 
         private void MakeStageButton(int index, CampaignStage stage, int progress, Vector2 aMin, Vector2 aMax)
@@ -177,7 +194,7 @@ namespace UI
             var txt = MakeCellText(go.transform, Vector2.zero, Vector2.one);
             txt.alignment = TextAnchor.MiddleCenter;
             string line2 = locked ? "Locked" : (cleared ? "SWEEP" : $"+{stage.gemReward}");
-            txt.text  = $"Stage {index + 1}\n{line2}";
+            txt.text  = $"{StageLabel(index)}\n{line2}";
             txt.color = locked ? new Color(0.6f, 0.6f, 0.65f) : Color.white;
         }
 
@@ -198,7 +215,8 @@ namespace UI
         // playing it, no star-rating gate (the campaign doesn't track those).
         private void SweepStage(int index)
         {
-            if (_campaign == null || _campaign.stages == null || index < 0 || index >= _campaign.stages.Length) return;
+            var stages = _campaign != null ? _campaign.AllStages() : null;
+            if (stages == null || index < 0 || index >= stages.Length) return;
             if (!StaminaService.CanAfford(StaminaService.StageCost))
             {
                 SetError($"Not enough stamina ({StaminaService.Current()}/{StaminaService.StageCost} needed).");
@@ -207,7 +225,7 @@ namespace UI
             StaminaService.Spend(StaminaService.StageCost);
             AudioManager.Instance.Play(Sfx.Click);
 
-            int gems = _campaign.stages[index].gemReward;
+            int gems = stages[index].gemReward;
             SaveSystem.Profile.gems += gems;
             var drop = GearService.RollDrop(index);
             SaveSystem.Save();

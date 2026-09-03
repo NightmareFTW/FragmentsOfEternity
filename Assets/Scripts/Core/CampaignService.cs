@@ -14,13 +14,16 @@ namespace Core
             var profile = SaveSystem.Profile;
             int reward  = DefaultReward;
 
-            if (campaign != null && campaign.stages != null &&
-                stageIndex >= 0 && stageIndex < campaign.stages.Length)
+            if (campaign != null)
             {
-                reward = campaign.stages[stageIndex].gemReward;
-                if (stageIndex == profile.campaignProgress &&
-                    profile.campaignProgress < campaign.stages.Length)
-                    profile.campaignProgress++;
+                var stages = campaign.AllStages();
+                if (stageIndex >= 0 && stageIndex < stages.Length)
+                {
+                    reward = stages[stageIndex].gemReward;
+                    if (stageIndex == profile.campaignProgress &&
+                        profile.campaignProgress < stages.Length)
+                        profile.campaignProgress++;
+                }
             }
 
             profile.gems += reward;

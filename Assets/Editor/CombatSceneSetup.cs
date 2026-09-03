@@ -21,10 +21,11 @@ namespace RPG.EditorTools
 
             // Load the campaign (created via RPG → Create Starter Content). Panels
             // size to stage 1's encounter; the actual stage is resolved at runtime.
-            var campaign  = AssetDatabase.LoadAssetAtPath<Data.CampaignData>(
+            var campaign   = AssetDatabase.LoadAssetAtPath<Data.CampaignData>(
                 "Assets/ScriptableObjects/Campaign.asset");
-            var encounter = (campaign != null && campaign.stages != null && campaign.stages.Length > 0)
-                ? campaign.stages[0].encounter
+            var allStages  = campaign != null ? campaign.AllStages() : null;
+            var encounter  = (allStages != null && allStages.Length > 0)
+                ? allStages[0].encounter
                 : AssetDatabase.LoadAssetAtPath<Data.EncounterData>(
                     "Assets/ScriptableObjects/Encounters/Stage1.asset");
 

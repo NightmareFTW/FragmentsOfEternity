@@ -49,11 +49,12 @@ namespace Combat
         // The campaign's selected-stage encounter wins; else the wired fallback.
         private EncounterData ResolveEncounter()
         {
-            if (_campaign != null && _campaign.stages != null)
+            if (_campaign != null)
             {
+                var stages = _campaign.AllStages();
                 int i = CampaignState.SelectedStage;
-                if (i >= 0 && i < _campaign.stages.Length && _campaign.stages[i].encounter != null)
-                    return _campaign.stages[i].encounter;
+                if (i >= 0 && i < stages.Length && stages[i].encounter != null)
+                    return stages[i].encounter;
             }
             return _encounter;
         }

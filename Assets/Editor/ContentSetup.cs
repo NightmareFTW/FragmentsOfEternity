@@ -73,6 +73,22 @@ namespace RPG.EditorTools
                 "A dark curse that silences its victim.",
                 onHit: new[] { Effect(StatusEffectType.Silence, 2, 0) });
 
+            var piercingShot = MakeSkill("Piercing Shot", "piercing_shot",
+                SkillType.Damage, TargetType.SingleEnemy, 20, 38, canCrit: true, cooldown: 1,
+                "A precise shot that draws blood.",
+                onHit: new[] { Effect(StatusEffectType.Bleed, 2, 15) });
+
+            var focusAim = MakeSkill("Focus Aim", "focus_aim",
+                SkillType.Buff, TargetType.Self, 0, 0, canCrit: false, cooldown: 3,
+                "Steady the shot, sharply raising attack.",
+                onSelf: new[] { Effect(StatusEffectType.AttackUp, 3, 30) });
+
+            var warlordsWrath = MakeSkill("Warlord's Wrath", "warlords_wrath",
+                SkillType.Damage, TargetType.AllEnemies, 22, 40, canCrit: true, cooldown: 3,
+                "A furious sweep that empowers the Warlord.",
+                onHit:  new[] { Effect(StatusEffectType.Bleed,    2, 14) },
+                onSelf: new[] { Effect(StatusEffectType.AttackUp, 2, 20) });
+
             // ── Allies ────────────────────────────────────────────────────
             var hero = MakeHero("Hero", "hero", Element.Light, HeroClass.Warrior, rarity: 5,
                 hp: 500, atk: 110, def: 60, spd: 120, critRate: 0.15f, critDmg: 1.6f,
@@ -93,6 +109,11 @@ namespace RPG.EditorTools
                 hp: 480, atk: 85, def: 55, spd: 110, critRate: 0.10f, critDmg: 1.5f,
                 hpGrowth: 50f, atkGrowth: 8f, defGrowth: 6f,
                 mend, slash, recover);
+
+            var ranger = MakeHero("Ranger", "ranger", Element.Dark, HeroClass.Ranger, rarity: 4,
+                hp: 400, atk: 115, def: 42, spd: 125, critRate: 0.20f, critDmg: 1.65f,
+                hpGrowth: 38f, atkGrowth: 13f, defGrowth: 3.5f,
+                piercingShot, hex, focusAim);
 
             // ── Enemies ───────────────────────────────────────────────────
             var goblin = MakeHero("Goblin", "goblin", Element.Earth, HeroClass.Warrior, rarity: 3,
@@ -115,27 +136,47 @@ namespace RPG.EditorTools
                 hpGrowth: 34f, atkGrowth: 9f, defGrowth: 3f,
                 slash, hex, null);
 
-            // ── Stage encounters (same roster, rising enemy level) ────────
+            var warlord = MakeHero("Orc Warlord", "orc_warlord", Element.Dark, HeroClass.Warrior, rarity: 5,
+                hp: 900, atk: 125, def: 90, spd: 85, critRate: 0.10f, critDmg: 1.6f,
+                hpGrowth: 85f, atkGrowth: 13f, defGrowth: 9f,
+                warlordsWrath, heavy, guard);
+
+            // ── Chapter 1: Skirmish (same roster, rising enemy level) ─────
             var allyRoster  = new[] { hero, knight, mage, cleric };
             var enemyRoster = new[] { goblin, grunt, orc, wolf };
             var s1 = MakeEncounter("Stage 1", "stage_1", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 1);
             var s2 = MakeEncounter("Stage 2", "stage_2", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 3);
             var s3 = MakeEncounter("Stage 3", "stage_3", allyRoster, enemyRoster, allyLevel: 1, enemyLevel: 5);
 
+            // ── Chapter 2: Warlord's March (tougher roster, the Warlord closes it out) ─
+            var enemyRoster2 = new[] { goblin, orc, wolf, warlord };
+            var s4 = MakeEncounter("Stage 4", "stage_4", allyRoster, enemyRoster2, allyLevel: 1, enemyLevel: 7);
+            var s5 = MakeEncounter("Stage 5", "stage_5", allyRoster, enemyRoster2, allyLevel: 1, enemyLevel: 9);
+            var s6 = MakeEncounter("Stage 6", "stage_6", allyRoster, enemyRoster2, allyLevel: 1, enemyLevel: 11);
+
             // ── Campaign (rewards rise with difficulty) ───────────────────
             MakeCampaign(
-                ("Stage 1 — Skirmish", s1, 150),
-                ("Stage 2 — Warband",  s2, 280),
-                ("Stage 3 — Warlord",  s3, 450));
+                ("Chapter 1: Skirmish", new[]
+                {
+                    ("Stage 1 — Skirmish", s1, 150),
+                    ("Stage 2 — Warband",  s2, 280),
+                    ("Stage 3 — Vanguard", s3, 450),
+                }),
+                ("Chapter 2: Warlord's March", new[]
+                {
+                    ("Stage 4 — Incursion",     s4, 650),
+                    ("Stage 5 — Siege",         s5, 900),
+                    ("Stage 6 — The Warlord",   s6, 1200),
+                }));
 
-            // ── Gacha pool (the four summonable heroes) ───────────────────
-            MakeGachaPool(new[] { hero, knight, mage, cleric }, summonCost: 300);
+            // ── Gacha pool (the five summonable heroes) ────────────────────
+            MakeGachaPool(new[] { hero, knight, mage, cleric, ranger }, summonCost: 300);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[RPG] Starter content created: 6 skills, 8 heroes, a 3-stage " +
-                      "campaign, and a GachaPool in Assets/ScriptableObjects/. Now run " +
-                      "RPG → Setup Combat Scene and RPG → Setup Home Scene.");
+            Debug.Log("[RPG] Starter content created: 9 skills, 10 heroes, a 2-chapter/" +
+                      "6-stage campaign, and a GachaPool in Assets/ScriptableObjects/. Now " +
+                      "run RPG → Setup Combat Scene and RPG → Setup Home Scene.");
         }
 
         [MenuItem("RPG/Create Starter Content", validate = true)]
@@ -225,18 +266,29 @@ namespace RPG.EditorTools
             return ed;
         }
 
-        static void MakeCampaign(params (string stageName, EncounterData enc, int reward)[] stages)
+        static void MakeCampaign(
+            params (string chapterName, (string stageName, EncounterData enc, int reward)[] stages)[] chapters)
         {
-            var cd   = LoadOrCreate<CampaignData>("Assets/ScriptableObjects/Campaign.asset");
-            var list = new CampaignStage[stages.Length];
-            for (int i = 0; i < stages.Length; i++)
-                list[i] = new CampaignStage
+            var cd       = LoadOrCreate<CampaignData>("Assets/ScriptableObjects/Campaign.asset");
+            var chapterList = new CampaignChapter[chapters.Length];
+            for (int c = 0; c < chapters.Length; c++)
+            {
+                var stages     = chapters[c].stages;
+                var stageList  = new CampaignStage[stages.Length];
+                for (int i = 0; i < stages.Length; i++)
+                    stageList[i] = new CampaignStage
+                    {
+                        stageName = stages[i].stageName,
+                        encounter = stages[i].enc,
+                        gemReward = stages[i].reward
+                    };
+                chapterList[c] = new CampaignChapter
                 {
-                    stageName = stages[i].stageName,
-                    encounter = stages[i].enc,
-                    gemReward = stages[i].reward
+                    chapterName = chapters[c].chapterName,
+                    stages      = stageList
                 };
-            cd.stages = list;
+            }
+            cd.chapters = chapterList;
             EditorUtility.SetDirty(cd);
         }
 
